@@ -5,25 +5,21 @@ frontend/.env
 # Python
 __pycache__/
 *.pyc
+.venv/
 dilipvenv/
+dilipvenv312/
 backend/.venv/
 frontend/.venv/
 *.egg-info/
 
 # Runtime data — regenerated at runtime, must not ship in the image or repo
-backend/chroma_db_new/
-backend/chroma_dec/
-backend/uploads/
-backend/quarantine/
-backend/logs/
-backend/app/users.json
-backend/app/token_usage.json
-backend/clamd.conf
-backend/clamd.log
-backend/clamd.pid
+backend/data/
 
 # Streamlit
 frontend/.streamlit/secrets.toml
+
+# Tooling caches
+.ruff_cache/
 
 # OS/editor
 .DS_Store

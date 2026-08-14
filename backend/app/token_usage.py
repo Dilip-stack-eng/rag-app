@@ -7,9 +7,9 @@ changeable by a SuperAdmin (enforced by the caller — see main.py's
 require_role dependency on POST /token-limit; this module has no concept
 of roles, it just does the bookkeeping).
 
-Persisted to token_usage.json so usage survives a backend restart within
-the same day — an in-memory-only counter would let someone reset their
-quota just by restarting the server.
+Persisted to backend/data/token_usage.json so usage survives a backend
+restart within the same day — an in-memory-only counter would let someone
+reset their quota just by restarting the server.
 """
 
 import json
@@ -21,7 +21,9 @@ from threading import Lock
 
 logger = logging.getLogger(__name__)
 
-_STORE_FILE = Path(os.getenv("TOKEN_USAGE_FILE", str(Path(__file__).parent / "token_usage.json")))
+_STORE_FILE = Path(
+    os.getenv("TOKEN_USAGE_FILE", str(Path(__file__).resolve().parent.parent / "data" / "token_usage.json"))
+)
 _lock = Lock()
 
 DEFAULT_DAILY_LIMIT = 50000

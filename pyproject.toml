@@ -1,0 +1,27 @@
+[project]
+name = "rag-app"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # ---- backend (backend/requirements.txt) ----
+    "fastapi",
+    "uvicorn[standard]",
+    "chromadb",
+    "google-genai",
+    "pypdf",
+    "python-multipart",
+    "pydantic",
+    "python-dotenv",
+    "PyJWT",
+    "bcrypt",
+    "python-docx",
+    "yara-python",
+
+    # ---- frontend (frontend/requirements.txt) ----
+    "streamlit",
+    "requests",
+    "Pillow",
+]
+
+[tool.uv]
+package = false

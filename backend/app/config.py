@@ -5,6 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# All mutable runtime state (vector DB, uploads, quarantine, logs, local
+# user/usage stores) lives under one data/ root, sibling to app/ — keeps the
+# source tree free of anything that isn't version-controlled code.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DATA_DIR = os.path.join(_BACKEND_DIR, "data")
+
 # ---- Gemini API (replaces the local Ollama model) ----
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 LLM_MODEL = os.getenv("GEMINI_LLM_MODEL", "gemini-2.5-flash")
@@ -21,7 +27,7 @@ if not GEMINI_API_KEY:
         stacklevel=1,
     )
 
-CHROMA_DIR = os.getenv("CHROMA_DIR", "./chroma_dec")
+CHROMA_DIR = os.getenv("CHROMA_DIR", os.path.join(_DATA_DIR, "chroma"))
 COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "documents")
 
 # ---- CORS ----
@@ -59,12 +65,11 @@ YARA_ENABLED = os.getenv("YARA_ENABLED", "true").strip().lower() in ("1", "true"
 YARA_TIMEOUT_SECONDS = int(os.getenv("YARA_TIMEOUT_SECONDS", "30"))
 
 # ---- Upload limits & storage ----
-# Both directories live under backend/ — this app never mounts a static file
-# server, so nothing under either path is ever web-reachable regardless.
+# Both directories live under backend/data/ — this app never mounts a static
+# file server, so nothing under either path is ever web-reachable regardless.
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "20"))
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOAD_ARCHIVE_DIR = os.getenv("UPLOAD_ARCHIVE_DIR", os.path.join(_BACKEND_DIR, "uploads"))
-QUARANTINE_DIR = os.getenv("QUARANTINE_DIR", os.path.join(_BACKEND_DIR, "quarantine"))
+UPLOAD_ARCHIVE_DIR = os.getenv("UPLOAD_ARCHIVE_DIR", os.path.join(_DATA_DIR, "uploads"))
+QUARANTINE_DIR = os.getenv("QUARANTINE_DIR", os.path.join(_DATA_DIR, "quarantine"))
 # Zip-bomb guard for .docx (itself a zip archive): reject if the archive would
 # expand past this many uncompressed MB, or if any single entry's compression
 # ratio is absurd.

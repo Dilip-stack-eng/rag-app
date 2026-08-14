@@ -1,6 +1,6 @@
 """On-disk storage for uploads — quarantine for rejected/suspicious files,
 archive for accepted ones. Both:
-  - live under backend/ (this app never serves static files, so neither
+  - live under backend/data/ (this app never serves static files, so neither
     directory is ever web-reachable — satisfies "store outside the web root"
     even though there's no literal web root here to escape)
   - use a random filename for the actual bytes on disk (never the user's

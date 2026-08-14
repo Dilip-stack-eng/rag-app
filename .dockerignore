@@ -1,0 +1,29 @@
+# Secrets — passed at `docker run` time via -e / --env-file, never baked into the image
+backend/.env
+frontend/.env
+frontend/.streamlit/secrets.toml
+
+# Runtime data — mount as a volume instead (see Dockerfile)
+backend/data/
+backend/chroma_db_new/
+backend/uploads/
+backend/quarantine/
+backend/logs/
+
+# Python
+.venv/
+dilipvenv/
+dilipvenv312/
+**/__pycache__/
+*.pyc
+*.egg-info/
+
+# VCS / tooling / docs — irrelevant to the running image
+.git/
+.claude/
+.ruff_cache/
+README.md
+
+# Editor
+.vscode/
+.idea/

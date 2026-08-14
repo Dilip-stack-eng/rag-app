@@ -538,22 +538,73 @@ hr, [data-testid="stDivider"] {
     color: var(--claude-text);
 }
 
-/* ---------- Daily token usage badge (Home page) ---------- */
-.token-usage-badge {
-    display: inline-block;
+/* ---------- Daily token usage card (Home page) ---------- */
+.token-usage-card {
+    border: 1px solid var(--claude-border);
+    border-radius: 14px;
+    background-color: #FFFFFF;
+    padding: 0.9rem 1.1rem 1rem;
+    margin-bottom: 1.1rem;
+}
+.token-usage-card .tuc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.45rem;
+}
+.token-usage-card .tuc-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--claude-text-soft);
+}
+.token-usage-card .tuc-pct {
     font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--claude-text-soft);
+}
+.token-usage-card .tuc-value {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 600;
+    color: var(--claude-text);
+    line-height: 1.2;
+    margin-bottom: 0.6rem;
+}
+.token-usage-card .tuc-value .tuc-sep {
+    color: var(--claude-text-soft);
+    font-weight: 400;
+    font-size: 1.15rem;
+    margin: 0 0.3rem;
+}
+.token-usage-card .tuc-unit {
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--claude-text-soft);
-    background-color: var(--claude-sidebar-bg);
-    border: 1px solid var(--claude-border);
-    border-radius: 999px;
-    padding: 0.3rem 0.8rem;
-    margin-bottom: 0.4rem;
+    margin-left: 0.3rem;
 }
-.token-usage-badge.over-limit {
+.token-usage-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background-color: var(--claude-sidebar-bg);
+    overflow: hidden;
+}
+.token-usage-fill {
+    height: 100%;
+    border-radius: 999px;
+    background-color: var(--claude-accent);
+    transition: width 0.3s ease;
+}
+.token-usage-card.over-limit .tuc-pct {
     color: #A3432F;
+}
+.token-usage-card.over-limit .token-usage-fill {
+    background-color: #A3432F;
+}
+.token-usage-card.over-limit {
     border-color: #A3432F;
-    background-color: rgba(163, 67, 47, 0.08);
 }
 
 /* ---------- World clock (sidebar, above the ATHENA brand) ---------- */
@@ -1290,6 +1341,16 @@ def _render_log_lines(lines, keywords):
     st.markdown("".join(rows), unsafe_allow_html=True)
 
 
+def _error_detail(resp):
+    """Best-effort human-readable message from a failed response — the
+    backend's JSON {"detail": ...} body when there is one, otherwise the
+    raw response text (e.g. a plain-text 502 from a proxy in front of it)."""
+    try:
+        return resp.json().get("detail", resp.text)
+    except ValueError:
+        return resp.text
+
+
 def _kv_grid(pairs):
     cards = "".join(
         f'<div class="kv-card"><div class="kv-label">{label}</div><div class="kv-value">{value}</div></div>'
@@ -1357,12 +1418,20 @@ if st.session_state.main_nav == "home":
         used, limit = usage_data["used"], usage_data["limit"]
         pct = min(1.0, used / limit) if limit else 0.0
         over = used >= limit
+        pct_label = "Limit reached" if over else f"{pct * 100:.0f}%"
         st.markdown(
-            f'<div class="token-usage-badge{" over-limit" if over else ""}">'
-            f'🔢 Token usage today: {used:,} / {limit:,}</div>',
+            f'<div class="token-usage-card{" over-limit" if over else ""}">'
+            f'<div class="tuc-header">'
+            f'<span class="tuc-label">🔢 Daily token usage</span>'
+            f'<span class="tuc-pct">{pct_label}</span>'
+            f'</div>'
+            f'<div class="tuc-value">{used:,}<span class="tuc-sep">/</span>{limit:,}'
+            f'<span class="tuc-unit">tokens today</span></div>'
+            f'<div class="token-usage-track"><div class="token-usage-fill" '
+            f'style="width:{pct * 100:.1f}%"></div></div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
-        st.progress(pct)
 
     if not st.session_state.history:
         st.markdown('<div class="landing-marker"></div>', unsafe_allow_html=True)
@@ -1413,10 +1482,7 @@ if st.session_state.main_nav == "knowledge_base":
             data = resp.json()
             st.success(t("added_chunks", n=data["chunks_added"], filename=data["filename"]))
         else:
-            try:
-                st.error(resp.json().get("detail", resp.text))
-            except ValueError:
-                st.error(resp.text)
+            st.error(_error_detail(resp))
 
     st.markdown(f'<div class="sidebar-section-label">{t("ingested_files_label")}</div>', unsafe_allow_html=True)
     kb_data, kb_error = _get_json("/documents")
@@ -1528,7 +1594,7 @@ if st.session_state.main_nav == "quarantine":
                                 st.session_state[dl_key] = resp.content
                                 st.rerun()
                             else:
-                                st.error(resp.json().get("detail", resp.text))
+                                st.error(_error_detail(resp))
                         except requests.exceptions.RequestException:
                             st.error(t("backend_unreachable"))
                     if dl_key in st.session_state:
@@ -1552,7 +1618,7 @@ if st.session_state.main_nav == "quarantine":
                                 st.session_state.pop(dl_key, None)
                                 st.rerun()
                             else:
-                                st.error(resp.json().get("detail", resp.text))
+                                st.error(_error_detail(resp))
                         except requests.exceptions.RequestException:
                             st.error(t("backend_unreachable"))
 
@@ -1567,7 +1633,7 @@ if st.session_state.main_nav == "quarantine":
                                 st.session_state.pop(dl_key, None)
                                 st.rerun()
                             else:
-                                st.error(resp.json().get("detail", resp.text))
+                                st.error(_error_detail(resp))
                         except requests.exceptions.RequestException:
                             st.error(t("backend_unreachable"))
 
@@ -1608,7 +1674,7 @@ if st.session_state.main_nav == "users":
                 if resp.ok:
                     st.success(f"User '{new_username.strip()}' added as {new_role}.")
                 else:
-                    st.error(resp.json().get("detail", resp.text))
+                    st.error(_error_detail(resp))
             except requests.exceptions.RequestException:
                 st.error(t("backend_unreachable"))
 
@@ -1653,10 +1719,7 @@ if st.session_state.main_nav == "control_panel":
                 if resp.ok:
                     st.success(f"Daily token limit updated to {int(new_limit):,}.")
                 else:
-                    try:
-                        st.error(resp.json().get("detail", resp.text))
-                    except ValueError:
-                        st.error(resp.text)
+                    st.error(_error_detail(resp))
             except requests.exceptions.RequestException:
                 st.error(t("backend_unreachable"))
 

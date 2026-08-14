@@ -17,7 +17,7 @@ import logging.handlers
 import os
 from pathlib import Path
 
-_LOG_DIR = Path(os.getenv("LOG_DIR", str(Path(__file__).resolve().parent.parent / "logs")))
+_LOG_DIR = Path(os.getenv("LOG_DIR", str(Path(__file__).resolve().parent.parent / "data" / "logs")))
 _LOG_FILE = _LOG_DIR / "app.log"
 
 _configured = False

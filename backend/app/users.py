@@ -2,7 +2,7 @@
 
 Complements the built-in env-configured ADMIN/SuperAdmin accounts
 (frontend .env) — accounts created here are additional logins, stored
-in users.json alongside this module. Passwords are hashed with bcrypt
+in backend/data/users.json. Passwords are hashed with bcrypt
 (per-password salt, tunable work factor) — never stored in plain text,
 and never as a fast unsalted hash that's cheap to brute-force offline.
 """
@@ -17,7 +17,7 @@ import bcrypt
 
 logger = logging.getLogger(__name__)
 
-_USERS_FILE = Path(os.getenv("USERS_FILE", str(Path(__file__).parent / "users.json")))
+_USERS_FILE = Path(os.getenv("USERS_FILE", str(Path(__file__).resolve().parent.parent / "data" / "users.json")))
 
 ROLES = ("ADMIN", "SuperAdmin")
 
