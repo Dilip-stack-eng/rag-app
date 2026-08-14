@@ -93,6 +93,17 @@ docker run -p 8501:8501 -p 8000:8000 \
   service crashes, so `docker run --restart unless-stopped` is worth adding
   for anything longer-lived than a local test.
 
+### Deploying this image directly on Render (single service)
+
+If you deploy this `Dockerfile` as one Render **Web Service** (rather than
+the two-service `render.yaml` Blueprint below), Render only routes external
+traffic to one port — set these two env vars on that service so it picks
+the frontend, not the backend:
+- `BACKEND_BIND_HOST=127.0.0.1` — keeps the backend internal-only so it's
+  never mistakenly auto-detected as the public port.
+- Render sets `PORT` itself; the entrypoint script already binds Streamlit
+  to it automatically, so nothing else to configure there.
+
 ## Deploying to Render
 
 This repo includes `render.yaml`, a Blueprint that deploys `backend/` and
