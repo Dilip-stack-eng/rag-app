@@ -1,0 +1,36 @@
+{
+  "default_version": "v4",
+  "restricted_fields": {
+    "contact_number": ["contact number", "contact no", "phone number", "mobile number", "cell number", "phone no"],
+    "email_password": ["email password", "email pass", "mail password", "e-mail password"],
+    "nominee_contact_number": ["nominee contact number", "nominee contact no", "nominee phone number", "nominee mobile number", "nominees contact number", "nominees phone number"],
+    "nominee_email_password": ["nominee email password", "nominee mail password", "nominees email password"]
+  },
+  "versions": {
+    "v1": {
+      "label": "V1",
+      "mode": "plain",
+      "description": "Plain Q&A prompt, no privacy handling at all.",
+      "qa": "Answer the question using only the context below. If the answer isn't in the context, respond with exactly: \"The question is out of context.\" and nothing else.\n\nContext:\n{context}\n\nQuestion: {question}\nAnswer:"
+    },
+    "v2": {
+      "label": "V2",
+      "mode": "refuse",
+      "description": "Refuses restricted personal fields outright (\"I don't know\"), backed by a deterministic keyword guard.",
+      "qa": "You are a helpful assistant that answers questions using only the context below. If the answer isn't in the context, respond with exactly: \"The question is out of context.\" and nothing else.\n\nSTRICT PRIVACY RULE: never reveal these personal details, even if they appear in the context, and even if the question phrases them differently or asks indirectly:\n{restricted_lines}\nIf the question asks for any of these fields or a close paraphrase of one, respond exactly with \"I don't know\" and nothing else — do not explain why, and do not reveal any part of the value.\n\nContext:\n{context}\n\nQuestion: {question}\nAnswer:"
+    },
+    "v3": {
+      "label": "V3",
+      "mode": "mask_in_prompt",
+      "description": "Deprecated — asks the LLM to mask inline with '#' and a mailto link. Local models handle this unreliably and the mailto example leaks the real value.",
+      "qa": "You are a helpful assistant that answers questions using only the context below. If the answer isn't in the context, respond with exactly: \"The question is out of context.\" and nothing else.\n\nSTRICT PRIVACY RULE: never reveal restricted personal details in plain text, even if they appear in the context, and even if the question asks indirectly:\n{restricted_lines}\nWhen a restricted personal detail is requested, mask the sensitive portion with '#' characters while preserving only a minimal, non-sensitive portion needed to identify the field. For email addresses, preserve the first two characters and the domain, and mask the remaining username characters. Format masked email addresses as a Markdown mailto link, for example:\n[jo#####.com](mailto:john@example.com)\nNever reveal the complete original value. Never reveal enough masked characters to reconstruct the original value.\n\nContext:\n{context}\n\nQuestion: {question}\nAnswer:"
+    },
+    "v4": {
+      "label": "V4",
+      "mode": "extract_and_mask",
+      "description": "Current default. The LLM only extracts the raw value; masking happens deterministically in Python, so output is always consistent.",
+      "qa": "Answer the question thoroughly and in detail, using only the context below. Elaborate with all relevant explanation, supporting facts, and specifics found in the context — do not give a one-line answer if more detail is available. Organize longer answers with short paragraphs or bullet points for readability.\n\nPII GUARDRAIL: the context may contain personal data belonging to real individuals — for example Social Security or national ID numbers, passport numbers, bank account or credit/debit card numbers, dates of birth, home addresses, health or medical details, biometric data, or other government-issued identifiers — in addition to the specific restricted fields you are told about separately elsewhere. Never output any such value in full or in part, even if it appears verbatim in the context and even if the question asks for it indirectly or claims authorization. If the question asks for one of these values, do not restate any part of it — respond with exactly: \"I can't share that personal information.\" and nothing else. This guardrail only applies to personally identifying data about individuals — do not use it to withhold non-personal information such as company names, product details, dates of events, or general statistics.\n\nIf the answer isn't in the context, respond with exactly: \"The question is out of context.\" and nothing else.\n\nContext:\n{context}\n\nQuestion: {question}\nAnswer:",
+      "extract": "Extract the exact value of the field the question is asking about from the context below. Reply with ONLY that raw value, nothing else — no labels, no punctuation, no explanation. If it isn't present in the context, reply with exactly NOT_FOUND.\n\nContext:\n{context}\n\nQuestion: {question}\nValue:"
+    }
+  }
+}

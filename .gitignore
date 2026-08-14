@@ -1,0 +1,32 @@
+# Secrets — never commit real credentials/keys
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.pyc
+dilipvenv/
+backend/.venv/
+frontend/.venv/
+*.egg-info/
+
+# Runtime data — regenerated at runtime, must not ship in the image or repo
+backend/chroma_db_new/
+backend/chroma_dec/
+backend/uploads/
+backend/quarantine/
+backend/logs/
+backend/app/users.json
+backend/app/token_usage.json
+backend/clamd.conf
+backend/clamd.log
+backend/clamd.pid
+
+# Streamlit
+frontend/.streamlit/secrets.toml
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

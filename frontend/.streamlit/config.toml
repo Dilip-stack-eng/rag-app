@@ -1,0 +1,11 @@
+[theme]
+primaryColor = "#D97757"
+backgroundColor = "#FAF9F5"
+secondaryBackgroundColor = "#F0EEE6"
+textColor = "#3D3929"
+font = "sans serif"
+
+[server]
+# Matches backend MAX_UPLOAD_SIZE_MB (backend/app/config.py) — keep both in
+# sync. Rejects oversized files client-side before they're even sent.
+maxUploadSize = 20

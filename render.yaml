@@ -1,0 +1,111 @@
+# Render Blueprint — deploys the backend (FastAPI) and frontend (Streamlit)
+# as two separate web services. Deploy: push this repo to GitHub/GitLab,
+# then in Render: New -> Blueprint -> select the repo.
+#
+# After the first deploy, two manual steps are required (Render assigns
+# URLs only once a service exists, so they can't be templated in advance):
+#   1. Copy the backend service's URL into the frontend service's
+#      BACKEND_URL env var.
+#   2. Copy the frontend service's URL into the backend service's
+#      CORS_ORIGINS env var.
+# Then trigger a redeploy of both. See README.md's "Deploying to Render"
+# section for the full walkthrough, including which env vars you must fill
+# in yourself (marked sync: false below — Render will prompt for these in
+# the dashboard, they are never read from this file).
+
+services:
+  - type: web
+    name: athena-backend
+    runtime: python
+    plan: starter # persistent disks require a paid plan; free tier has no disk support
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    disk:
+      name: athena-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+
+      # ---- Gemini API ----
+      - key: GEMINI_API_KEY
+        sync: false # paste your key in the Render dashboard, never in git
+      - key: GEMINI_LLM_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_EMBED_MODEL
+        value: gemini-embedding-001
+
+      # ---- Vector store / uploads / quarantine / auth store / logs, all on the persistent disk ----
+      - key: CHROMA_DIR
+        value: /var/data/chroma_db
+      - key: UPLOAD_ARCHIVE_DIR
+        value: /var/data/uploads
+      - key: QUARANTINE_DIR
+        value: /var/data/quarantine
+      - key: USERS_FILE
+        value: /var/data/users.json
+      - key: TOKEN_USAGE_FILE
+        value: /var/data/token_usage.json
+      - key: LOG_DIR
+        value: /var/data/logs
+
+      # ---- YARA malware scanning ----
+      - key: YARA_ENABLED
+        value: "true"
+
+      # ---- CORS — set to the frontend service's URL after it's created ----
+      - key: CORS_ORIGINS
+        sync: false
+
+      # ---- JWT auth ----
+      - key: JWT_SECRET_KEY
+        generateValue: true # Render generates a random secret for you
+      - key: JWT_EXPIRY_MINUTES
+        value: "60"
+
+      # ---- Built-in accounts (must match athena-frontend's APP_USERNAME/SUPERADMIN_USERNAME) ----
+      - key: APP_USERNAME
+        value: ADMIN
+      - key: APP_PASSWORD
+        sync: false
+      - key: SUPERADMIN_USERNAME
+        value: SuperAdmin
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+
+      # ---- Login lockout email/SMS alerts (optional — leave unset to disable) ----
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: ALERT_ADMIN_EMAIL
+        sync: false
+      - key: ALERT_ADMIN_MOBILE
+        sync: false
+
+  - type: web
+    name: athena-frontend
+    runtime: python
+    plan: starter # free tier works too (no disk needed here); starter avoids cold-start sleep
+    region: oregon
+    rootDir: frontend
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      # Set to the athena-backend service's URL once it's been created.
+      - key: BACKEND_URL
+        sync: false
