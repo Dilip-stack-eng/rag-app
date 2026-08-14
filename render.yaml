@@ -12,22 +12,30 @@
 # section for the full walkthrough, including which env vars you must fill
 # in yourself (marked sync: false below — Render will prompt for these in
 # the dashboard, they are never read from this file).
+#
+# Both services below run on Render's free plan — $0, but with no
+# persistent disk. That means the backend's local filesystem (ingested
+# documents / Chroma DB, uploaded files, quarantine, extra user accounts
+# created via the Users page, logs) resets to empty on every restart —
+# including a redeploy and the free plan's auto-sleep after ~15min idle.
+# Login with the built-in ADMIN/SuperAdmin accounts (env vars below)
+# always still works since those aren't stored on disk. If you need
+# ingested documents / accounts to actually persist, switch the backend
+# service's `plan` to `starter` and re-add a `disk:` block mounted at
+# e.g. /var/data, pointing CHROMA_DIR/UPLOAD_ARCHIVE_DIR/QUARANTINE_DIR/
+# USERS_FILE/TOKEN_USAGE_FILE/LOG_DIR at paths under it.
 
 services:
   - type: web
     name: athena-backend
     runtime: python
-    plan: starter # persistent disks require a paid plan; free tier has no disk support
+    plan: free # no persistent disk on this plan — see the free-tier note near the bottom of this file
     region: oregon
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
-    disk:
-      name: athena-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.6
@@ -40,19 +48,11 @@ services:
       - key: GEMINI_EMBED_MODEL
         value: gemini-embedding-001
 
-      # ---- Vector store / uploads / quarantine / auth store / logs, all on the persistent disk ----
-      - key: CHROMA_DIR
-        value: /var/data/chroma_db
-      - key: UPLOAD_ARCHIVE_DIR
-        value: /var/data/uploads
-      - key: QUARANTINE_DIR
-        value: /var/data/quarantine
-      - key: USERS_FILE
-        value: /var/data/users.json
-      - key: TOKEN_USAGE_FILE
-        value: /var/data/token_usage.json
-      - key: LOG_DIR
-        value: /var/data/logs
+      # No CHROMA_DIR / UPLOAD_ARCHIVE_DIR / QUARANTINE_DIR / USERS_FILE /
+      # TOKEN_USAGE_FILE / LOG_DIR overrides here — without a disk to point
+      # them at, app/config.py's own backend/data/ defaults are used
+      # instead, which live on this plan's ephemeral local filesystem (see
+      # the free-tier note near the bottom of this file).
 
       # ---- YARA malware scanning ----
       - key: YARA_ENABLED
@@ -97,7 +97,7 @@ services:
   - type: web
     name: athena-frontend
     runtime: python
-    plan: starter # free tier works too (no disk needed here); starter avoids cold-start sleep
+    plan: free # cold-starts after ~15min idle; upgrade to starter to avoid that
     region: oregon
     rootDir: frontend
     buildCommand: pip install -r requirements.txt

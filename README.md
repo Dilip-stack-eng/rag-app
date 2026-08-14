@@ -96,10 +96,16 @@ docker run -p 8501:8501 -p 8000:8000 \
 ## Deploying to Render
 
 This repo includes `render.yaml`, a Blueprint that deploys `backend/` and
-`frontend/` as two separate web services with a small persistent disk
-attached to the backend (for ChromaDB, uploads, quarantine, `users.json`,
-`token_usage.json`, and logs — Render's filesystem is otherwise ephemeral
-and wipes on every restart/redeploy).
+`frontend/` as two separate web services, both on Render's **free** plan —
+$0/month. The trade-off: free services have no persistent disk, so the
+backend's local filesystem (ChromaDB, uploads, quarantine, extra user
+accounts, logs) resets to empty on every restart, including a redeploy and
+the free plan's auto-sleep after ~15 min idle. Logging in with the
+built-in ADMIN/SuperAdmin accounts always still works (those live in env
+vars, not on disk) — you'll just need to re-upload documents after any
+restart. See the note at the top of `render.yaml` for how to switch the
+backend to a paid `starter` plan + disk if you need documents/accounts to
+actually persist.
 
 1. Push this repo to GitHub/GitLab.
 2. In the Render dashboard: **New → Blueprint**, select the repo. Render
@@ -115,11 +121,10 @@ and wipes on every restart/redeploy).
 5. Redeploy both services so the new env vars take effect.
 
 Notes:
-- The backend's `plan: starter` is required because persistent disks aren't
-  available on Render's free tier. The frontend can be downgraded to `plan:
-  free` if you don't mind its cold-start sleep after inactivity.
+- Both services cold-start after ~15 min of inactivity on the free plan
+  (the first request after a sleep takes longer while it spins back up).
 - Malware scanning uses `yara-python`, a pip package with prebuilt wheels
   for common Linux Python versions — no Docker image or apt packages
   required, unlike the ClamAV approach this replaced.
-- Re-upload your documents after the first deploy — a fresh Chroma
-  collection starts empty.
+- Re-upload your documents after every restart/redeploy — without a
+  persistent disk, a fresh Chroma collection starts empty each time.
