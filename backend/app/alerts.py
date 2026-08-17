@@ -4,7 +4,7 @@ import ssl
 from email.mime.text import MIMEText
 from typing import Optional
 
-from . import config, login_throttle, rag
+from . import config
 
 logger = logging.getLogger(__name__)
 
@@ -44,26 +44,11 @@ def _send_email(to_address: str, subject: str, body: str) -> None:
     logger.info("Alert email sent to %s", to_address)
 
 
-def _describe_lockout_pattern(attempted_username: str) -> Optional[str]:
-    """Best-effort AI risk read on this lockout's timing — e.g. 3 attempts
-    within 8 seconds reads very differently from 3 attempts spread over
-    several minutes. Returns None (never raises) if Gemini isn't configured
-    or the call fails; send_lockout_alert() falls back to the plain
-    non-AI message in that case, so the alert always still sends."""
-    count, span = login_throttle.get_attempt_span(attempted_username)
-    if count < 2:
-        return None
-    prompt = (
-        f"A login account named '{attempted_username}' was just locked after {count} failed "
-        f"password attempts within {span:.0f} seconds. In exactly 1-2 short sentences, plain "
-        "English, tell a security admin whether this timing looks like an automated "
-        "brute-force attempt or an ordinary human mistake (e.g. a forgotten password), and "
-        "briefly why. No preamble, no markdown, no headers."
-    )
-    return rag.generate_short_text(prompt, max_tokens=150)
-
-
-def send_lockout_alert(attempted_username: str) -> None:
+def send_lockout_alert(attempted_username: str, risk: Optional[tuple[str, str]] = None) -> None:
+    """risk, when given, is (risk_level, explanation) from rag.assess_lockout().
+    It's computed once by the caller (main.py's /auth/login) — which also
+    uses it to decide whether to extend the lockout itself — rather than
+    this function making its own duplicate Gemini call for the same event."""
     logger.warning("Sending lockout alert: attempted_username=%s", attempted_username)
     subject = "Athena security alert: login locked after 3 failed attempts"
     body = (
@@ -72,12 +57,9 @@ def send_lockout_alert(attempted_username: str) -> None:
     )
 
     email_body = body
-    ai_summary = _describe_lockout_pattern(attempted_username)
-    if ai_summary:
-        email_body += f"\nAI risk read: {ai_summary}\n"
-        logger.info("AI summary generated for lockout alert: username=%s", attempted_username)
-    else:
-        logger.info("AI summary unavailable for lockout alert: username=%s", attempted_username)
+    if risk:
+        risk_level, explanation = risk
+        email_body += f"\nAI risk assessment: {risk_level.upper()} — {explanation}\n"
 
     _send_email(config.ALERT_ADMIN_EMAIL, subject, email_body)
 

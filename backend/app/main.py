@@ -152,11 +152,23 @@ def login(req: LoginRequest):
     if role is None:
         just_locked, attempts_left = login_throttle.record_failure(req.username)
         if just_locked:
-            alerts.send_lockout_alert(req.username)
+            # The 60s baseline lockout above is already in effect regardless of
+            # anything below — this only ever adds MORE time on top of it, and
+            # any failure here (no API key, network error, bad response) just
+            # leaves the baseline as-is. Computed once and reused for both the
+            # extension decision and the alert email, instead of two separate
+            # Gemini calls for the same event.
+            risk = rag.assess_lockout(req.username, *login_throttle.get_attempt_span(req.username))
+            if risk:
+                extra_seconds = login_throttle.RISK_EXTENSION_SECONDS.get(risk[0], 0)
+                if extra_seconds:
+                    login_throttle.extend_lockout(req.username, extra_seconds)
+            alerts.send_lockout_alert(req.username, risk)
+            _, actual_remaining = login_throttle.is_locked(req.username)
             raise HTTPException(
                 429,
                 f"Account locked after {login_throttle.MAX_ATTEMPTS} failed attempts. "
-                f"Try again in {login_throttle.LOCKOUT_SECONDS}s.",
+                f"Try again in {actual_remaining}s.",
             )
         raise HTTPException(401, f"Invalid username or password. {attempts_left} attempt(s) remaining.")
 

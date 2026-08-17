@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 LOCKOUT_SECONDS = 60
 
+# Extra seconds layered on top of LOCKOUT_SECONDS when an AI risk assessment
+# (rag.assess_lockout(), applied in main.py's /auth/login) judges a failure
+# burst likely automated rather than an ordinary human mistake. "low" adds
+# nothing. This can only ever make a lockout longer than the deterministic
+# baseline above — never shorter, and the baseline itself is never skipped
+# regardless of what the AI assessment says or whether it's available at all.
+RISK_EXTENSION_SECONDS = {"low": 0, "medium": 120, "high": 240}
+
 _state_lock = Lock()
 _state: dict[str, dict] = {}  # normalized username -> {"failures": int, "locked_until": float | None}
 
@@ -63,6 +71,26 @@ def record_failure(username: str) -> tuple[bool, int]:
         return False, remaining
 
 
+def extend_lockout(username: str, extra_seconds: int) -> None:
+    """Adds extra_seconds on top of an already-locked username's expiry —
+    used after an AI risk assessment judges the failure burst likely
+    automated (see RISK_EXTENSION_SECONDS). No-op if the username isn't
+    currently locked, or if extra_seconds isn't positive: this function
+    only ever lengthens an existing lock, it can't create one or shorten
+    one, so a caller passing a bad value can't accidentally weaken it."""
+    if extra_seconds <= 0:
+        return
+    with _state_lock:
+        entry = _state.get(_key(username))
+        if not entry or not entry.get("locked_until"):
+            return
+        entry["locked_until"] += extra_seconds
+        logger.warning(
+            "Lockout extended by AI risk assessment: username=%s extra_seconds=%d",
+            username, extra_seconds,
+        )
+
+
 def record_success(username: str) -> None:
     with _state_lock:
         had_failures = _key(username) in _state
@@ -95,9 +123,10 @@ def list_status() -> list[dict]:
 def get_attempt_span(username: str) -> tuple[int, float]:
     """Returns (attempt_count, seconds_between_first_and_last_recorded_failure)
     for the current burst of failures — e.g. 3 attempts within 8 seconds
-    looks very different from 3 attempts spread over several minutes. Used
-    to give the AI-written lockout-alert summary something concrete to
-    reason about (see alerts.py); not read for any access-control decision."""
+    looks very different from 3 attempts spread over several minutes. Feeds
+    rag.assess_lockout() (main.py's /auth/login), which may in turn call
+    extend_lockout() above — this function itself only reads state, it
+    doesn't lock or unlock anything."""
     with _state_lock:
         entry = _state.get(_key(username))
         if not entry or not entry.get("timestamps"):

@@ -147,23 +147,45 @@ def _generate(prompt: str) -> tuple[str, int]:
     return response.text or "", tokens
 
 
-def generate_short_text(prompt: str, max_tokens: int = 150) -> Optional[str]:
-    """Best-effort short Gemini completion for callers outside the RAG flow
-    (e.g. an AI-written blurb in a security alert email). Unlike _generate(),
-    never raises — returns None if no API key is configured or the call
-    fails, so a caller can treat this as optional enrichment and fall back
-    to a plain, non-AI message rather than breaking whatever triggered it."""
+def assess_lockout(username: str, attempt_count: int, span_seconds: float) -> Optional[tuple[str, str]]:
+    """Best-effort AI read on a lockout's failure-timing pattern (e.g. 3
+    attempts in 2 seconds vs. spread over several minutes). Returns
+    (risk_level, explanation) where risk_level is exactly "low", "medium",
+    or "high" — or None if Gemini isn't configured, the call fails, or the
+    response doesn't parse cleanly into that shape.
+
+    Deliberately never trusts the LLM with anything beyond this coarse,
+    easy-to-validate classification — same philosophy as _mask_value()'s
+    "never trust the LLM to do character arithmetic": the *decision* of how
+    much extra lockout time a risk level earns lives in login_throttle's
+    RISK_EXTENSION_SECONDS, as plain deterministic Python, not in whatever
+    the model happens to output. Callers must treat None as "fall back to
+    the standard lockout," never as license to skip locking the account."""
     if not config.GEMINI_API_KEY:
         return None
+    prompt = (
+        f"A login account named '{username}' just failed its password {attempt_count} times "
+        f"within {span_seconds:.0f} seconds, triggering a lockout. Reply with EXACTLY two lines "
+        "and nothing else (no markdown, no headers):\n"
+        "Line 1: one word only — low, medium, or high — for how likely this is an automated "
+        "brute-force/credential-stuffing attempt versus an ordinary human mistake.\n"
+        "Line 2: one short plain-English sentence explaining why, for a security admin."
+    )
     try:
         response = _get_genai().models.generate_content(
             model=config.LLM_MODEL,
             contents=prompt,
-            config=genai_types.GenerateContentConfig(max_output_tokens=max_tokens),
+            config=genai_types.GenerateContentConfig(max_output_tokens=120),
         )
-        return (response.text or "").strip() or None
+        lines = [line.strip() for line in (response.text or "").splitlines() if line.strip()]
+        if len(lines) < 2:
+            return None
+        risk_level = lines[0].lower()
+        if risk_level not in ("low", "medium", "high"):
+            return None
+        return risk_level, lines[1]
     except Exception:
-        logger.exception("generate_short_text failed")
+        logger.exception("assess_lockout failed for username=%s", username)
         return None
 
 
