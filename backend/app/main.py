@@ -366,6 +366,11 @@ def system_info(_user: dict = SUPERADMIN_ONLY):
     }
 
 
+@app.get("/login-attempts")
+def login_attempts(_user: dict = SUPERADMIN_ONLY):
+    return {"attempts": login_throttle.list_status()}
+
+
 @app.get("/token-usage")
 def get_token_usage(_user: dict = ANY_ROLE):
     return token_usage.status(_user["username"])

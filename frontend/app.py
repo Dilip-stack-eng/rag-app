@@ -182,7 +182,7 @@ html, body, [class*="css"] {
     padding-top: 2rem;
 }
 .block-container:has(.login-page-marker) {
-    max-width: 1200px;
+    max-width: 1360px;
 }
 
 h1 {
@@ -288,7 +288,120 @@ hr, [data-testid="stDivider"] {
 .login-page-marker + div {
     display: flex;
     justify-content: center;
-    padding-top: 7vh;
+    padding-top: 4vh;
+}
+
+/* Split shell: rotating AI-visual pane (left) + form pane (right) */
+.login-split-marker + div[data-testid="stHorizontalBlock"] {
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(61, 57, 41, 0.18);
+    gap: 0 !important;
+    align-items: stretch;
+}
+[data-testid="stColumn"]:has(.login-visual-marker) {
+    background:
+        radial-gradient(circle at 18% 18%, rgba(217, 119, 87, 0.28), transparent 55%),
+        radial-gradient(circle at 82% 88%, rgba(217, 119, 87, 0.20), transparent 50%),
+        linear-gradient(160deg, #2A2620 0%, #3D3929 55%, #2A2620 100%);
+    padding: 0 !important;
+    position: relative;
+    min-height: 640px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+[data-testid="stColumn"]:has(.login-form-marker) {
+    background-color: #FFFFFF;
+    padding: 3rem 3.4rem !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.login-visual-brand {
+    position: absolute;
+    top: 1.7rem;
+    left: 1.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.92);
+    letter-spacing: 0.02em;
+}
+.login-visual-brand-accent { color: var(--claude-accent); }
+
+.login-scene-stack {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 640px;
+}
+.login-scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem;
+    text-align: center;
+    opacity: 0;
+}
+.login-scene svg {
+    width: 150px;
+    height: 150px;
+    margin-bottom: 1.7rem;
+}
+.login-scene-title {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    margin-bottom: 0.5rem;
+}
+.login-scene-subtitle {
+    font-size: 0.92rem;
+    color: rgba(255, 255, 255, 0.65);
+    max-width: 280px;
+    line-height: 1.55;
+}
+/* Each scene is visible for a 1/5 (5-minute) slice of a 25-minute loop —
+   pure CSS, so it keeps rotating even while the page sits idle with no
+   Streamlit rerun (a rerun can't drive a wall-clock timer on its own). */
+.login-scene[data-idx="0"] { animation: login-scene-0 1500s linear infinite; }
+.login-scene[data-idx="1"] { animation: login-scene-1 1500s linear infinite; }
+.login-scene[data-idx="2"] { animation: login-scene-2 1500s linear infinite; }
+.login-scene[data-idx="3"] { animation: login-scene-3 1500s linear infinite; }
+.login-scene[data-idx="4"] { animation: login-scene-4 1500s linear infinite; }
+@keyframes login-scene-0 {
+    0%, 19.5% { opacity: 1; }
+    20%, 100% { opacity: 0; }
+}
+@keyframes login-scene-1 {
+    0%, 19.5% { opacity: 0; }
+    20%, 39.5% { opacity: 1; }
+    40%, 100% { opacity: 0; }
+}
+@keyframes login-scene-2 {
+    0%, 39.5% { opacity: 0; }
+    40%, 59.5% { opacity: 1; }
+    60%, 100% { opacity: 0; }
+}
+@keyframes login-scene-3 {
+    0%, 59.5% { opacity: 0; }
+    60%, 79.5% { opacity: 1; }
+    80%, 100% { opacity: 0; }
+}
+@keyframes login-scene-4 {
+    0%, 79.5% { opacity: 0; }
+    80%, 99.5% { opacity: 1; }
+    100% { opacity: 0; }
 }
 .lang-bar-marker + div {
     display: flex;
@@ -328,22 +441,21 @@ hr, [data-testid="stDivider"] {
     color: var(--claude-accent);
 }
 [data-testid="stVerticalBlockBorderWrapper"]:has(.login-card-marker) {
-    background-color: #FFFFFF;
-    border: 1px solid var(--claude-border) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 8px 30px rgba(61, 57, 41, 0.08);
-    padding: 0.5rem 0.75rem;
+    background-color: transparent;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0;
 }
 .login-logo {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.55rem;
-    margin-bottom: 0.6rem;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
 }
 .login-logo-name {
     font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 1.55rem;
+    font-size: 1.75rem;
     font-weight: 700;
     color: var(--claude-text);
 }
@@ -352,17 +464,17 @@ hr, [data-testid="stDivider"] {
 }
 .login-title {
     font-family: 'Source Serif 4', Georgia, serif !important;
-    font-size: 1.6rem !important;
+    font-size: 1.9rem !important;
     font-weight: 600 !important;
     color: var(--claude-text) !important;
     text-align: center;
-    margin-bottom: 0.3rem !important;
+    margin-bottom: 0.35rem !important;
 }
 .login-subtitle {
     color: var(--claude-text-soft);
-    font-size: 0.92rem;
+    font-size: 0.98rem;
     text-align: center;
-    margin-bottom: 1.6rem;
+    margin-bottom: 2rem;
 }
 .login-subtitle b { color: var(--claude-text); }
 
@@ -413,7 +525,14 @@ hr, [data-testid="stDivider"] {
 
 .login-card-marker ~ div [data-testid="stTextInput"] input {
     border-radius: 10px;
-    padding: 0.65rem 0.85rem;
+    padding: 0.8rem 1rem;
+    font-size: 0.95rem;
+}
+.login-card-marker ~ div [data-baseweb="select"] > div {
+    border-radius: 10px;
+    min-height: 3rem;
+    font-size: 0.95rem;
+    box-shadow: none !important;
 }
 
 .email-continue-marker + div .stButton > button {
@@ -1095,6 +1214,97 @@ def _render_captcha_image(text: str) -> bytes:
     return buf.getvalue()
 
 
+# Rotating AI-themed visuals for the login page's left panel — each tied to
+# something Athena actually does, not generic stock art. Rotation itself is
+# pure CSS (see .login-scene keyframes in CLAUDE_CSS), so it keeps cycling
+# every 5 minutes even while the page sits idle with no Streamlit rerun.
+_LOGIN_SCENES = [
+    {
+        "title": "Powered by Gemini",
+        "subtitle": "Advanced language understanding behind every answer.",
+        "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="110" y1="60" x2="60" y2="110" stroke="rgba(217,119,87,0.45)" stroke-width="1.5"/>
+            <line x1="110" y1="60" x2="160" y2="110" stroke="rgba(217,119,87,0.45)" stroke-width="1.5"/>
+            <line x1="110" y1="60" x2="110" y2="150" stroke="rgba(217,119,87,0.45)" stroke-width="1.5"/>
+            <line x1="60" y1="110" x2="110" y2="150" stroke="rgba(217,119,87,0.3)" stroke-width="1.5"/>
+            <line x1="160" y1="110" x2="110" y2="150" stroke="rgba(217,119,87,0.3)" stroke-width="1.5"/>
+            <line x1="60" y1="110" x2="160" y2="110" stroke="rgba(217,119,87,0.3)" stroke-width="1.5"/>
+            <circle cx="110" cy="60" r="9" fill="#D97757"/>
+            <circle cx="60" cy="110" r="7" fill="#E8A283"/>
+            <circle cx="160" cy="110" r="7" fill="#E8A283"/>
+            <circle cx="110" cy="150" r="7" fill="#E8A283"/>
+        </svg>""",
+    },
+    {
+        "title": "Retrieval-Augmented Answers",
+        "subtitle": "Grounded in the documents you upload, not guesswork.",
+        "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="60" y="70" width="70" height="90" rx="8" fill="rgba(255,255,255,0.06)" stroke="rgba(232,162,131,0.5)" stroke-width="1.5"/>
+            <rect x="50" y="60" width="70" height="90" rx="8" fill="rgba(255,255,255,0.08)" stroke="rgba(232,162,131,0.6)" stroke-width="1.5"/>
+            <rect x="40" y="50" width="70" height="90" rx="8" fill="#2A2620" stroke="#D97757" stroke-width="1.5"/>
+            <line x1="55" y1="70" x2="95" y2="70" stroke="rgba(217,119,87,0.7)" stroke-width="2"/>
+            <line x1="55" y1="85" x2="95" y2="85" stroke="rgba(217,119,87,0.45)" stroke-width="2"/>
+            <line x1="55" y1="100" x2="85" y2="100" stroke="rgba(217,119,87,0.45)" stroke-width="2"/>
+            <circle cx="150" cy="130" r="24" fill="none" stroke="#D97757" stroke-width="4"/>
+            <line x1="168" y1="148" x2="188" y2="168" stroke="#D97757" stroke-width="5" stroke-linecap="round"/>
+        </svg>""",
+    },
+    {
+        "title": "Ask Anything",
+        "subtitle": "Chat naturally with your knowledge base, in any language.",
+        "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="30" y="60" width="105" height="52" rx="18" fill="rgba(255,255,255,0.08)" stroke="rgba(232,162,131,0.5)" stroke-width="1.5"/>
+            <circle cx="58" cy="86" r="3" fill="rgba(232,162,131,0.85)"/>
+            <circle cx="73" cy="86" r="3" fill="rgba(232,162,131,0.85)"/>
+            <circle cx="88" cy="86" r="3" fill="rgba(232,162,131,0.85)"/>
+            <rect x="85" y="120" width="105" height="52" rx="18" fill="#D97757"/>
+            <path d="M172 34 l4.5 11 l11 4.5 l-11 4.5 l-4.5 11 l-4.5 -11 l-11 -4.5 l11 -4.5 z" fill="#E8A283"/>
+        </svg>""",
+    },
+    {
+        "title": "YARA-Scanned Uploads",
+        "subtitle": "Every file screened for malware before it's ever ingested.",
+        "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M110 40 L165 60 V110 C165 145 140 168 110 180 C80 168 55 145 55 110 V60 Z"
+                  fill="rgba(255,255,255,0.06)" stroke="#D97757" stroke-width="3"/>
+            <path d="M85 108 L102 126 L138 88" fill="none" stroke="#D97757" stroke-width="7"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>""",
+    },
+    {
+        "title": "Vector Search",
+        "subtitle": "Fast, semantic retrieval across everything you've indexed.",
+        "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="78" cy="86" rx="35" ry="30" fill="none" stroke="rgba(217,119,87,0.35)" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <ellipse cx="152" cy="145" rx="30" ry="25" fill="none" stroke="rgba(217,119,87,0.35)" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <circle cx="70" cy="70" r="4" fill="#E8A283"/>
+            <circle cx="90" cy="85" r="4" fill="#D97757"/>
+            <circle cx="65" cy="95" r="4" fill="#E8A283"/>
+            <circle cx="150" cy="130" r="4" fill="#E8A283"/>
+            <circle cx="165" cy="150" r="4" fill="#D97757"/>
+            <circle cx="140" cy="155" r="4" fill="#E8A283"/>
+            <circle cx="120" cy="60" r="4" fill="rgba(232,162,131,0.6)"/>
+            <circle cx="60" cy="150" r="4" fill="rgba(232,162,131,0.6)"/>
+        </svg>""",
+    },
+]
+
+
+def _login_visual_html() -> str:
+    scenes = "".join(
+        f'<div class="login-scene" data-idx="{i}">{s["svg"]}'
+        f'<div class="login-scene-title">{s["title"]}</div>'
+        f'<div class="login-scene-subtitle">{s["subtitle"]}</div></div>'
+        for i, s in enumerate(_LOGIN_SCENES)
+    )
+    return (
+        '<div class="login-visual-marker"></div>'
+        f'<div class="login-visual-brand">{athena_logo(22)}'
+        '<span>ATHENA <span class="login-visual-brand-accent">AI</span></span></div>'
+        f'<div class="login-scene-stack">{scenes}</div>'
+    )
+
+
 def _reset_lockout():
     st.session_state.login_attempts = 0
     st.session_state.login_locked = False
@@ -1140,8 +1350,12 @@ def render_login():
         if time.time() - st.session_state.login_locked_at >= LOCKOUT_SECONDS:
             _reset_lockout()
 
-    _, mid, _ = st.columns([1, 2.2, 1])
+    st.markdown('<div class="login-split-marker"></div>', unsafe_allow_html=True)
+    visual_col, mid = st.columns([5, 6])
+    with visual_col:
+        st.markdown(_login_visual_html(), unsafe_allow_html=True)
     with mid:
+        st.markdown('<div class="login-form-marker"></div>', unsafe_allow_html=True)
         language_selector()
         with st.container(border=True):
             st.markdown('<div class="login-card-marker"></div>', unsafe_allow_html=True)
@@ -1186,7 +1400,16 @@ def render_login():
                 if "captcha_text" not in st.session_state:
                     st.session_state.captcha_text = _random_captcha_text()
 
-                username = st.text_input(t("username"), placeholder=t("username"), key="username_input")
+                username_choice = st.selectbox(
+                    t("username"), ["ADMIN", "SuperAdmin", "Other…"], key="username_choice"
+                )
+                if username_choice == "Other…":
+                    username = st.text_input(
+                        t("username"), placeholder=t("username"),
+                        key="username_input", label_visibility="collapsed",
+                    )
+                else:
+                    username = username_choice
                 password = st.text_input(
                     t("password"), type="password", placeholder=t("password"), key="password_input"
                 )
@@ -1693,6 +1916,27 @@ if st.session_state.main_nav == "control_panel":
             ("Default prompt version", info["default_prompt_version"].upper()),
             ("Documents ingested", info["document_count"]),
         ])
+
+        st.markdown('<div class="sidebar-section-label">Login attempts</div>', unsafe_allow_html=True)
+        st.caption(
+            f"Accounts with recent failed logins. After {info['login_max_attempts']} failed "
+            f"attempts an account locks for {info['login_lockout_seconds']}s — resets automatically "
+            "when it expires, or on the account's next successful login."
+        )
+        la_data, la_error = _get_json("/login-attempts")
+        if la_error:
+            st.error(la_error)
+        elif not la_data.get("attempts"):
+            st.caption("No failed login attempts on record.")
+        else:
+            for a in la_data["attempts"]:
+                if a["locked"]:
+                    st.warning(
+                        f"🔒 **{a['username']}** — locked after {a['failures']} failed attempts. "
+                        f"Unlocks in {a['remaining_seconds']}s."
+                    )
+                else:
+                    st.caption(f"{a['username']} — {a['failures']} failed attempt(s), not locked.")
 
         st.markdown('<div class="sidebar-section-label">Daily token limit</div>', unsafe_allow_html=True)
         st.caption(

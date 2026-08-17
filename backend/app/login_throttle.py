@@ -68,3 +68,24 @@ def record_success(username: str) -> None:
         _state.pop(_key(username), None)
         if had_failures:
             logger.info("Failure count reset after successful login: username=%s", username)
+
+
+def list_status() -> list[dict]:
+    """Snapshot of every username with a nonzero failure count, for the
+    SuperAdmin-only Control Panel view. Only usernames that have failed at
+    least once show up here — the whole point of this module being
+    in-memory is that it doesn't accumulate a permanent record of everyone
+    who has ever logged in successfully."""
+    with _state_lock:
+        now = time.time()
+        result = []
+        for username, entry in _state.items():
+            locked_until = entry.get("locked_until")
+            locked = bool(locked_until and locked_until > now)
+            result.append({
+                "username": username,
+                "failures": entry["failures"],
+                "locked": locked,
+                "remaining_seconds": int(locked_until - now) + 1 if locked else 0,
+            })
+        return sorted(result, key=lambda r: (-r["locked"], -r["failures"]))
