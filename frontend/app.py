@@ -182,7 +182,7 @@ html, body, [class*="css"] {
     padding-top: 2rem;
 }
 .block-container:has(.login-page-marker) {
-    max-width: 1360px;
+    max-width: 1560px;
 }
 
 h1 {
@@ -293,12 +293,12 @@ hr, [data-testid="stDivider"] {
 
 /* Split shell: rotating AI-visual pane (left) + form pane (right) */
 .login-split-marker + div[data-testid="stHorizontalBlock"] {
-    max-width: 1200px;
+    max-width: 1440px;
     width: 100%;
     margin: 0 auto;
-    border-radius: 22px;
+    border-radius: 24px;
     overflow: hidden;
-    box-shadow: 0 24px 64px rgba(61, 57, 41, 0.18);
+    box-shadow: 0 32px 90px rgba(61, 57, 41, 0.22);
     gap: 0 !important;
     align-items: stretch;
 }
@@ -309,38 +309,51 @@ hr, [data-testid="stDivider"] {
         linear-gradient(160deg, #2A2620 0%, #3D3929 55%, #2A2620 100%);
     padding: 0 !important;
     position: relative;
-    min-height: 640px;
+    min-height: 760px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 [data-testid="stColumn"]:has(.login-form-marker) {
     background-color: #FFFFFF;
-    padding: 3rem 3.4rem !important;
+    padding: 3.6rem 4.4rem !important;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 .login-visual-brand {
     position: absolute;
-    top: 1.7rem;
-    left: 1.9rem;
+    top: 2rem;
+    left: 2.2rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.55rem;
     font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 1rem;
+    font-size: 1.15rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.92);
     letter-spacing: 0.02em;
 }
 .login-visual-brand-accent { color: var(--claude-accent); }
 
+.login-visual-trust {
+    position: absolute;
+    bottom: 2rem;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.5);
+}
+.login-visual-trust span { margin: 0 0.6rem; }
+
 .login-scene-stack {
     position: relative;
     width: 100%;
     height: 100%;
-    min-height: 640px;
+    min-height: 760px;
 }
 .login-scene {
     position: absolute;
@@ -354,22 +367,22 @@ hr, [data-testid="stDivider"] {
     opacity: 0;
 }
 .login-scene svg {
-    width: 150px;
-    height: 150px;
-    margin-bottom: 1.7rem;
+    width: 190px;
+    height: 190px;
+    margin-bottom: 2rem;
 }
 .login-scene-title {
     font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     font-weight: 600;
     color: #FFFFFF;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.55rem;
 }
 .login-scene-subtitle {
-    font-size: 0.92rem;
+    font-size: 1rem;
     color: rgba(255, 255, 255, 0.65);
-    max-width: 280px;
-    line-height: 1.55;
+    max-width: 320px;
+    line-height: 1.6;
 }
 /* Each scene is visible for a 1/5 (5-minute) slice of a 25-minute loop —
    pure CSS, so it keeps rotating even while the page sits idle with no
@@ -421,19 +434,19 @@ hr, [data-testid="stDivider"] {
     box-shadow: none !important;
 }
 .captcha-marker + div [data-testid="stImage"] img {
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid var(--claude-border);
-    max-width: 130px;
+    max-width: 160px;
     width: 100%;
 }
 .captcha-refresh-marker + div .stButton > button {
     background-color: #FFFFFF;
     color: var(--claude-text-soft);
     border: 1px solid var(--claude-border);
-    border-radius: 8px;
-    height: 2.4rem;
-    min-height: 2.4rem;
-    font-size: 0.95rem;
+    border-radius: 10px;
+    height: 2.9rem;
+    min-height: 2.9rem;
+    font-size: 1.05rem;
     padding: 0;
 }
 .captcha-refresh-marker + div .stButton > button:hover {
@@ -450,31 +463,40 @@ hr, [data-testid="stDivider"] {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.6rem;
-    margin-bottom: 0.9rem;
+    gap: 0.65rem;
+    margin-bottom: 1.1rem;
 }
 .login-logo-name {
     font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 1.75rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--claude-text);
 }
 .login-logo-name-accent {
     color: var(--claude-accent);
 }
+.login-eyebrow {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--claude-accent);
+    margin-bottom: 0.5rem;
+}
 .login-title {
     font-family: 'Source Serif 4', Georgia, serif !important;
-    font-size: 1.9rem !important;
+    font-size: 2.3rem !important;
     font-weight: 600 !important;
     color: var(--claude-text) !important;
     text-align: center;
-    margin-bottom: 0.35rem !important;
+    margin-bottom: 0.4rem !important;
 }
 .login-subtitle {
     color: var(--claude-text-soft);
-    font-size: 0.98rem;
+    font-size: 1.05rem;
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 2.3rem;
 }
 .login-subtitle b { color: var(--claude-text); }
 
@@ -525,13 +547,13 @@ hr, [data-testid="stDivider"] {
 
 .login-card-marker ~ div [data-testid="stTextInput"] input {
     border-radius: 10px;
-    padding: 0.8rem 1rem;
-    font-size: 0.95rem;
+    padding: 0.95rem 1.15rem;
+    font-size: 1rem;
 }
 .login-card-marker ~ div [data-baseweb="select"] > div {
     border-radius: 10px;
-    min-height: 3rem;
-    font-size: 0.95rem;
+    min-height: 3.4rem;
+    font-size: 1rem;
     box-shadow: none !important;
 }
 
@@ -540,7 +562,9 @@ hr, [data-testid="stDivider"] {
     color: #fff;
     border: none;
     border-radius: 10px;
-    font-weight: 500;
+    padding: 0.9rem 1.1rem;
+    font-size: 1.02rem;
+    font-weight: 600;
 }
 .email-continue-marker + div .stButton > button:hover {
     background-color: var(--claude-accent-hover);
@@ -1299,9 +1323,12 @@ def _login_visual_html() -> str:
     )
     return (
         '<div class="login-visual-marker"></div>'
-        f'<div class="login-visual-brand">{athena_logo(22)}'
+        f'<div class="login-visual-brand">{athena_logo(26)}'
         '<span>ATHENA <span class="login-visual-brand-accent">AI</span></span></div>'
         f'<div class="login-scene-stack">{scenes}</div>'
+        '<div class="login-visual-trust">🔒 YARA-scanned uploads'
+        '<span>&middot;</span>⚡ Powered by Gemini'
+        '<span>&middot;</span>🔐 Role-based access</div>'
     )
 
 
@@ -1360,11 +1387,12 @@ def render_login():
         with st.container(border=True):
             st.markdown('<div class="login-card-marker"></div>', unsafe_allow_html=True)
             st.markdown(
-                f'<div class="login-logo">{athena_logo(40)}'
+                f'<div class="login-logo">{athena_logo(46)}'
                 '<span class="login-logo-name">ATHENA <span class="login-logo-name-accent">AI</span></span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
+            st.markdown('<div class="login-eyebrow">Secure Sign-In</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="login-title">{t("welcome_back")}</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div class="login-subtitle">{t("login_subtitle")}</div>',
