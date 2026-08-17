@@ -48,8 +48,9 @@ def record_failure(username: str) -> tuple[bool, int]:
     """Records a failed attempt. Returns (just_locked, attempts_remaining)."""
     with _state_lock:
         key = _key(username)
-        entry = _state.setdefault(key, {"failures": 0, "locked_until": None})
+        entry = _state.setdefault(key, {"failures": 0, "locked_until": None, "timestamps": []})
         entry["failures"] += 1
+        entry["timestamps"].append(time.time())
         if entry["failures"] >= MAX_ATTEMPTS:
             entry["locked_until"] = time.time() + LOCKOUT_SECONDS
             logger.warning(
@@ -89,3 +90,18 @@ def list_status() -> list[dict]:
                 "remaining_seconds": int(locked_until - now) + 1 if locked else 0,
             })
         return sorted(result, key=lambda r: (-r["locked"], -r["failures"]))
+
+
+def get_attempt_span(username: str) -> tuple[int, float]:
+    """Returns (attempt_count, seconds_between_first_and_last_recorded_failure)
+    for the current burst of failures — e.g. 3 attempts within 8 seconds
+    looks very different from 3 attempts spread over several minutes. Used
+    to give the AI-written lockout-alert summary something concrete to
+    reason about (see alerts.py); not read for any access-control decision."""
+    with _state_lock:
+        entry = _state.get(_key(username))
+        if not entry or not entry.get("timestamps"):
+            return 0, 0.0
+        timestamps = entry["timestamps"]
+        span = timestamps[-1] - timestamps[0] if len(timestamps) > 1 else 0.0
+        return len(timestamps), span

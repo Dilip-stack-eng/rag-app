@@ -147,6 +147,26 @@ def _generate(prompt: str) -> tuple[str, int]:
     return response.text or "", tokens
 
 
+def generate_short_text(prompt: str, max_tokens: int = 150) -> Optional[str]:
+    """Best-effort short Gemini completion for callers outside the RAG flow
+    (e.g. an AI-written blurb in a security alert email). Unlike _generate(),
+    never raises — returns None if no API key is configured or the call
+    fails, so a caller can treat this as optional enrichment and fall back
+    to a plain, non-AI message rather than breaking whatever triggered it."""
+    if not config.GEMINI_API_KEY:
+        return None
+    try:
+        response = _get_genai().models.generate_content(
+            model=config.LLM_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(max_output_tokens=max_tokens),
+        )
+        return (response.text or "").strip() or None
+    except Exception:
+        logger.exception("generate_short_text failed")
+        return None
+
+
 def _extract_raw_value(question: str, context: str, template: str) -> tuple[Optional[str], int]:
     prompt = template.format(context=context, question=question)
     raw, tokens = _generate(prompt)
