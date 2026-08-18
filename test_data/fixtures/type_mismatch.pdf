@@ -1,0 +1,1 @@
+This is plain text pretending to be a PDF. It should be rejected by the upload pipeline's magic-byte check before ever reaching YARA.

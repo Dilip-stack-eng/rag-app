@@ -17,7 +17,7 @@ import bcrypt
 
 logger = logging.getLogger(__name__)
 
-_USERS_FILE = Path(os.getenv("USERS_FILE", str(Path(__file__).resolve().parent.parent / "data" / "users.json")))
+_USERS_FILE = Path(os.getenv("USERS_FILE", str(Path(__file__).resolve().parent.parent.parent / "data" / "users.json")))
 
 ROLES = ("ADMIN", "SuperAdmin")
 
@@ -72,3 +72,8 @@ def verify_user(username: str, password: str) -> Optional[str]:
         if u["username"].lower() == username.strip().lower() and _matches(password, u["password_hash"]):
             return u["role"]
     return None
+
+
+def user_exists(username: str) -> bool:
+    username = username.strip().lower()
+    return any(u["username"].lower() == username for u in _load())

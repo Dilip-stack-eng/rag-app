@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from . import config
+from ..core import config
 
 logger = logging.getLogger(__name__)
 

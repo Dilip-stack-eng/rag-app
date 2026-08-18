@@ -21,6 +21,9 @@ dependencies = [
     "streamlit",
     "requests",
     "Pillow",
+
+    # ---- tests (test_data/) ----
+    "pytest",
 ]
 
 [tool.uv]

@@ -30,6 +30,11 @@ LOCKOUT_SECONDS = 60
 # regardless of what the AI assessment says or whether it's available at all.
 RISK_EXTENSION_SECONDS = {"low": 0, "medium": 120, "high": 240}
 
+# Used by block() below for a manual SuperAdmin block, which has no fixed
+# duration — effectively "until unblock() is called", without needing a
+# separate boolean everywhere is_locked()'s remaining-seconds is used.
+INDEFINITE_BLOCK_SECONDS = 100 * 365 * 24 * 3600
+
 _state_lock = Lock()
 _state: dict[str, dict] = {}  # normalized username -> {"failures": int, "locked_until": float | None}
 
@@ -99,25 +104,66 @@ def record_success(username: str) -> None:
             logger.info("Failure count reset after successful login: username=%s", username)
 
 
+def block(username: str) -> None:
+    """Manually locks a username indefinitely, regardless of its current
+    failure count — used by the SuperAdmin Control Panel's Block button.
+    Unlike the automatic 3-strike lockout, this doesn't auto-expire after
+    LOCKOUT_SECONDS; it stays in effect until unblock() is called."""
+    with _state_lock:
+        key = _key(username)
+        entry = _state.setdefault(key, {"failures": 0, "locked_until": None, "timestamps": []})
+        entry["locked_until"] = time.time() + INDEFINITE_BLOCK_SECONDS
+        entry["blocked"] = True
+        logger.warning("Account manually blocked by SuperAdmin: username=%s", username)
+
+
+def unblock(username: str) -> None:
+    """Clears all throttle state for a username, releasing a lockout —
+    manual block or automatic 3-strike alike — immediately. Used by the
+    SuperAdmin Control Panel's Unblock button."""
+    with _state_lock:
+        had_entry = _key(username) in _state
+        _state.pop(_key(username), None)
+        if had_entry:
+            logger.warning("Account manually unblocked by SuperAdmin: username=%s", username)
+
+
+def is_blocked(username: str) -> bool:
+    """Whether username is currently under a manual SuperAdmin block
+    specifically (as opposed to an ordinary, self-expiring 3-strike
+    lockout) — lets callers show a different message/UI for the two."""
+    with _state_lock:
+        entry = _state.get(_key(username))
+        return bool(
+            entry
+            and entry.get("blocked")
+            and entry.get("locked_until")
+            and entry["locked_until"] > time.time()
+        )
+
+
 def list_status() -> list[dict]:
-    """Snapshot of every username with a nonzero failure count, for the
-    SuperAdmin-only Control Panel view. Only usernames that have failed at
-    least once show up here — the whole point of this module being
-    in-memory is that it doesn't accumulate a permanent record of everyone
-    who has ever logged in successfully."""
+    """Snapshot of every username with a nonzero failure count or an active
+    manual block, for the SuperAdmin-only Control Panel view. Usernames that
+    have never failed a login and were never manually blocked don't show up
+    here — the whole point of this module being in-memory is that it doesn't
+    accumulate a permanent record of everyone who has ever logged in
+    successfully."""
     with _state_lock:
         now = time.time()
         result = []
         for username, entry in _state.items():
             locked_until = entry.get("locked_until")
             locked = bool(locked_until and locked_until > now)
+            blocked = bool(locked and entry.get("blocked"))
             result.append({
                 "username": username,
                 "failures": entry["failures"],
                 "locked": locked,
-                "remaining_seconds": int(locked_until - now) + 1 if locked else 0,
+                "blocked": blocked,
+                "remaining_seconds": 0 if blocked else (int(locked_until - now) + 1 if locked else 0),
             })
-        return sorted(result, key=lambda r: (-r["locked"], -r["failures"]))
+        return sorted(result, key=lambda r: (-r["blocked"], -r["locked"], -r["failures"]))
 
 
 def get_attempt_span(username: str) -> tuple[int, float]:

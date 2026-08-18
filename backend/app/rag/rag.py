@@ -7,7 +7,7 @@ import chromadb
 from google import genai
 from google.genai import types as genai_types
 
-from . import config
+from ..core import config
 from .prompts import RESTRICTED_FIELDS, DEFAULT_VERSION, get_version, list_versions
 
 logger = logging.getLogger(__name__)
@@ -186,6 +186,93 @@ def assess_lockout(username: str, attempt_count: int, span_seconds: float) -> Op
         return risk_level, lines[1]
     except Exception:
         logger.exception("assess_lockout failed for username=%s", username)
+        return None
+
+
+def explain_quarantine(filename: str, reason: str) -> Optional[tuple[str, str]]:
+    """Best-effort AI read on why a quarantined upload was flagged — helps a
+    SuperAdmin reviewing the Quarantine page judge Accept vs. Delete faster
+    without having to parse the raw rejection reason themselves. Returns
+    (confidence, explanation) where confidence is exactly "high", "medium",
+    or "low" for how likely this looks like a genuine threat versus a false
+    positive — or None if Gemini isn't configured, the call fails, or the
+    response doesn't parse cleanly.
+
+    Purely explanatory, same philosophy as assess_lockout(): this never
+    changes, overrides, or is consulted by the actual accept/reject
+    decision, which stays 100% deterministic (YARA / magic-byte / zip-bomb
+    checks in antivirus.py / file_validation.py, already applied before a
+    file ever reaches quarantine). A SuperAdmin still makes the real
+    release/delete call themselves — this only helps them decide faster."""
+    if not config.GEMINI_API_KEY:
+        return None
+    prompt = (
+        f"A file named '{filename}' was automatically quarantined by an upload security "
+        f"pipeline. The recorded rejection reason is: '{reason}'. Reply with EXACTLY two lines "
+        "and nothing else (no markdown, no headers):\n"
+        "Line 1: one word only — high, medium, or low — for how confident you are this is a "
+        "genuine security threat rather than a false positive.\n"
+        "Line 2: one short plain-English sentence explaining the reason and, if relevant, what "
+        "a security admin should look for when manually inspecting the file before deciding "
+        "whether to release or permanently delete it."
+    )
+    try:
+        response = _get_genai().models.generate_content(
+            model=config.LLM_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(max_output_tokens=150),
+        )
+        lines = [line.strip() for line in (response.text or "").splitlines() if line.strip()]
+        if len(lines) < 2:
+            return None
+        confidence = lines[0].lower()
+        if confidence not in ("high", "medium", "low"):
+            return None
+        return confidence, lines[1]
+    except Exception:
+        logger.exception("explain_quarantine failed for filename=%s", filename)
+        return None
+
+
+# Hard cap regardless of how many lines a caller passes in — keeps a single
+# digest request bounded in cost/latency even if the Security page's own
+# log-tail limit is raised later.
+_DIGEST_MAX_LINES = 200
+
+
+def generate_security_digest(log_lines: list[str]) -> Optional[str]:
+    """AI-written plain-English summary of a batch of security-relevant log
+    lines (already filtered by the caller — see frontend's
+    _SECURITY_LOG_KEYWORDS) for the Security page's "Generate AI digest"
+    button. Unlike assess_lockout()/explain_quarantine(), this is pure
+    summarization with no downstream code decision riding on the output,
+    so free text is fine here — nothing parses or acts on it programmatically.
+    Returns None (never raises) if there's nothing to summarize, Gemini
+    isn't configured, or the call fails."""
+    lines = [line for line in log_lines if line.strip()][-_DIGEST_MAX_LINES:]
+    if not lines or not config.GEMINI_API_KEY:
+        return None
+    prompt = (
+        "You are a security analyst reviewing recent activity log lines from a document "
+        "Q&A application (auth attempts, lockouts, upload/malware-scan rejections, "
+        "authorization checks). Write a concise digest for another admin, under 150 words, "
+        "plain text, no markdown headers:\n"
+        "1. A 1-2 sentence overview of what happened in this window.\n"
+        "2. Bullet points for anything anomalous worth attention (repeated failures, unusual "
+        "timing/bursts, targeted usernames, quarantine spikes). If genuinely nothing stands "
+        "out, say so plainly instead of inventing concerns.\n"
+        "3. One line of recommended next action, if any.\n\n"
+        "Log lines (oldest first):\n" + "\n".join(lines)
+    )
+    try:
+        response = _get_genai().models.generate_content(
+            model=config.LLM_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(max_output_tokens=350),
+        )
+        return (response.text or "").strip() or None
+    except Exception:
+        logger.exception("generate_security_digest failed")
         return None
 
 

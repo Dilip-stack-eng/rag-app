@@ -8,7 +8,7 @@ load_dotenv()
 # All mutable runtime state (vector DB, uploads, quarantine, logs, local
 # user/usage stores) lives under one data/ root, sibling to app/ — keeps the
 # source tree free of anything that isn't version-controlled code.
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _DATA_DIR = os.path.join(_BACKEND_DIR, "data")
 
 # ---- Gemini API (replaces the local Ollama model) ----
@@ -77,8 +77,11 @@ MAX_DOCX_UNCOMPRESSED_MB = int(os.getenv("MAX_DOCX_UNCOMPRESSED_MB", "200"))
 MAX_ZIP_COMPRESSION_RATIO = int(os.getenv("MAX_ZIP_COMPRESSION_RATIO", "100"))
 
 # ---- Built-in accounts ----
-# The backend is the single source of truth for auth (see app/auth.py), so these
-# mirror frontend/.env's APP_USERNAME/SUPERADMIN_USERNAME — keep both files in sync.
+# The backend is the sole source of truth for auth (see app/auth/auth.py) —
+# every login, including the frontend's quick-sign-in buttons, still goes
+# through POST /auth/login and is validated against these same values.
+# The frontend also has its own copy of these (frontend/.env) solely to
+# send as the quick-sign-in buttons' password — keep both files in sync.
 APP_USERNAME = os.getenv("APP_USERNAME", "ADMIN")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "12345")
 SUPERADMIN_USERNAME = os.getenv("SUPERADMIN_USERNAME", "SuperAdmin")

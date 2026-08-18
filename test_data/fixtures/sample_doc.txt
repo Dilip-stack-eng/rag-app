@@ -1,0 +1,26 @@
+Athena Test Corpus — Employee Handbook Excerpt
+
+Section 3: Remote Work Policy
+
+Employees may work remotely up to three days per week, subject to manager
+approval. Remote workers must be reachable during core hours, 10am to 4pm
+in their local timezone, and must attend the weekly all-hands meeting on
+Thursdays.
+
+Section 7: Expense Reimbursement
+
+Approved business expenses are reimbursed within 14 business days of
+submission. Submissions must include an itemized receipt. Expenses over
+$500 require director-level approval before submission.
+
+Section 12: Data Handling
+
+All customer data must be stored in approved systems only. Employees must
+never export customer data to personal devices or unapproved cloud
+storage. Any suspected data handling incident must be reported to the
+security team within 24 hours.
+
+This document is used as a fixture for testing Athena's RAG pipeline —
+upload it, then ask a question like "how many days can employees work
+remotely?" or "how long does expense reimbursement take?" and confirm the
+answer is grounded in this text and cites this filename as the source.

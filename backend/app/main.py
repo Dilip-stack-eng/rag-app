@@ -1,3 +1,4 @@
+import base64
 import io
 import logging
 import os
@@ -11,9 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pypdf import PdfReader
 
-from . import rag, config, alerts, auth, users, antivirus, login_throttle, logging_config, quarantine, token_usage
-from .chunking import chunk_text
-from .file_validation import (
+from . import alerts, token_usage
+from .auth import auth, captcha, login_throttle, users
+from .core import config, logging_config
+from .rag import rag
+from .rag.chunking import chunk_text
+from .security import antivirus, quarantine
+from .security.file_validation import (
     check_zip_bomb,
     detect_executable,
     detect_type_mismatch,
@@ -95,6 +100,16 @@ class AddUserRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    # Optional for backward compatibility with the Streamlit frontend, which
+    # never sends these (it does its own equivalent captcha check before
+    # ever calling this endpoint). The React frontend always sends both —
+    # see app/auth/captcha.py.
+    captcha_id: Optional[str] = None
+    captcha_answer: Optional[str] = None
+
+
+class QuickLoginRequest(BaseModel):
+    role: str  # "ADMIN" or "SuperAdmin" — see POST /auth/quick-login
 
 
 class LoginResponse(BaseModel):
@@ -106,6 +121,10 @@ class LoginResponse(BaseModel):
 
 class TokenLimitRequest(BaseModel):
     daily_limit: int
+
+
+class SecurityDigestRequest(BaseModel):
+    log_lines: List[str]
 
 
 ANY_ROLE = Depends(auth.require_role("ADMIN", "SuperAdmin"))
@@ -142,15 +161,43 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/auth/login", response_model=LoginResponse)
-def login(req: LoginRequest):
-    locked, remaining_seconds = login_throttle.is_locked(req.username)
+@app.get("/auth/captcha")
+def get_captcha():
+    """Issues a fresh CAPTCHA challenge — see app/auth/captcha.py for why
+    this needs to be a real backend endpoint for the React frontend (the
+    Streamlit frontend doesn't call this at all, it has its own equivalent
+    check). image_base64 is a data-URI-ready PNG; captcha_id must be sent
+    back with POST /auth/login."""
+    captcha_id, png_bytes = captcha.generate()
+    return {
+        "captcha_id": captcha_id,
+        "image_base64": base64.b64encode(png_bytes).decode("ascii"),
+    }
+
+
+def _authenticate_and_issue_token(username: str, password: str) -> LoginResponse:
+    """Core login logic shared by POST /auth/login and POST /auth/quick-login
+    — lockout check, credential check, AI-extended lockout on the 3rd
+    failure, token issuance on success. Callers decide what happens around
+    this (e.g. captcha verification); this function itself has no opinion
+    on captcha."""
+    locked, remaining_seconds = login_throttle.is_locked(username)
     if locked:
+        if login_throttle.is_blocked(username):
+            raise HTTPException(429, "Account locked — access blocked by a SuperAdmin. Contact your administrator.")
         raise HTTPException(429, f"Account locked. Try again in {remaining_seconds}s.")
 
-    role = auth.authenticate_user(req.username, req.password)
+    role = auth.authenticate_user(username, password)
     if role is None:
-        just_locked, attempts_left = login_throttle.record_failure(req.username)
+        if not auth.account_exists(username):
+            # Nothing to lock, extend, or alert on — this username was never
+            # a real account, so don't create login-throttle state, run an AI
+            # risk assessment, or send an admin alert email for it. Same
+            # generic message as a real account's wrong-password case, so the
+            # response itself doesn't reveal whether the username exists.
+            raise HTTPException(401, "Invalid username or password.")
+
+        just_locked, attempts_left = login_throttle.record_failure(username)
         if just_locked:
             # The 60s baseline lockout above is already in effect regardless of
             # anything below — this only ever adds MORE time on top of it, and
@@ -158,13 +205,13 @@ def login(req: LoginRequest):
             # leaves the baseline as-is. Computed once and reused for both the
             # extension decision and the alert email, instead of two separate
             # Gemini calls for the same event.
-            risk = rag.assess_lockout(req.username, *login_throttle.get_attempt_span(req.username))
+            risk = rag.assess_lockout(username, *login_throttle.get_attempt_span(username))
             if risk:
                 extra_seconds = login_throttle.RISK_EXTENSION_SECONDS.get(risk[0], 0)
                 if extra_seconds:
-                    login_throttle.extend_lockout(req.username, extra_seconds)
-            alerts.send_lockout_alert(req.username, risk)
-            _, actual_remaining = login_throttle.is_locked(req.username)
+                    login_throttle.extend_lockout(username, extra_seconds)
+            alerts.send_lockout_alert(username, risk)
+            _, actual_remaining = login_throttle.is_locked(username)
             raise HTTPException(
                 429,
                 f"Account locked after {login_throttle.MAX_ATTEMPTS} failed attempts. "
@@ -172,9 +219,40 @@ def login(req: LoginRequest):
             )
         raise HTTPException(401, f"Invalid username or password. {attempts_left} attempt(s) remaining.")
 
-    login_throttle.record_success(req.username)
-    token = auth.create_token(req.username, role)
-    return LoginResponse(access_token=token, username=req.username, role=role)
+    login_throttle.record_success(username)
+    token = auth.create_token(username, role)
+    return LoginResponse(access_token=token, username=username, role=role)
+
+
+@app.post("/auth/login", response_model=LoginResponse)
+def login(req: LoginRequest):
+    # Only enforced when the client actually sends a captcha_id — see
+    # LoginRequest's docstring-comment on why this is conditional rather
+    # than mandatory for now.
+    if req.captcha_id is not None:
+        if not captcha.verify(req.captcha_id, req.captcha_answer):
+            logger.warning("Captcha verification failed: username=%s", req.username)
+            raise HTTPException(400, "Captcha verification failed. Please try again.")
+    return _authenticate_and_issue_token(req.username, req.password)
+
+
+@app.post("/auth/quick-login", response_model=LoginResponse)
+def quick_login(req: QuickLoginRequest):
+    """One-click sign-in for the login page's ADMIN/SuperAdmin buttons.
+    The real password never leaves the backend — it's looked up here from
+    the same env vars config.py already uses for the built-in accounts,
+    so a pure client-side SPA never has to know or transmit it (unlike the
+    Streamlit frontend's equivalent, which needed its own copy of the
+    password in frontend/.env). Still goes through the exact same lockout
+    logic as a normal login — this only skips typing the password, not any
+    security check."""
+    if req.role == "SuperAdmin":
+        username, password = config.SUPERADMIN_USERNAME, config.SUPERADMIN_PASSWORD
+    else:
+        username, password = config.APP_USERNAME, config.APP_PASSWORD
+    if not password:
+        raise HTTPException(503, f"Quick sign-in for {req.role} isn't configured on this server.")
+    return _authenticate_and_issue_token(username, password)
 
 
 @app.post("/upload")
@@ -383,6 +461,38 @@ def login_attempts(_user: dict = SUPERADMIN_ONLY):
     return {"attempts": login_throttle.list_status()}
 
 
+def _is_superadmin_account(username: str) -> bool:
+    """Whether username names a SuperAdmin account (built-in or created via
+    users.add_user()) — used to stop a SuperAdmin from blocking the only
+    role that could ever unblock anything again, whether that's another
+    SuperAdmin's account or (via block_login's self-check) their own."""
+    if username == config.SUPERADMIN_USERNAME:
+        return True
+    return any(
+        u["username"].lower() == username.strip().lower() and u["role"] == "SuperAdmin"
+        for u in users.list_users()
+    )
+
+
+@app.post("/login-attempts/{username}/block")
+def block_login(username: str, _user: dict = SUPERADMIN_ONLY):
+    """Manually blocks a username from logging in until a SuperAdmin calls
+    unblock_login below — independent of the automatic 3-strike lockout,
+    and with no fixed expiry. Refuses to block any SuperAdmin account
+    (including the caller's own) so a SuperAdmin can never lock every
+    SuperAdmin out of the ability to undo it."""
+    if _is_superadmin_account(username):
+        raise HTTPException(400, "Cannot block a SuperAdmin account.")
+    login_throttle.block(username)
+    return {"username": username, "blocked": True}
+
+
+@app.post("/login-attempts/{username}/unblock")
+def unblock_login(username: str, _user: dict = SUPERADMIN_ONLY):
+    login_throttle.unblock(username)
+    return {"username": username, "blocked": False}
+
+
 @app.get("/token-usage")
 def get_token_usage(_user: dict = ANY_ROLE):
     return token_usage.status(_user["username"])
@@ -401,6 +511,20 @@ def set_token_limit(req: TokenLimitRequest, _user: dict = SUPERADMIN_ONLY):
 def logs_recent(limit: int = 200, _user: dict = SUPERADMIN_ONLY):
     limit = max(1, min(limit, 1000))
     return {"lines": logging_config.tail(limit)}
+
+
+@app.post("/security/digest")
+def security_digest(req: SecurityDigestRequest, _user: dict = SUPERADMIN_ONLY):
+    """AI-written summary of security-relevant log lines the caller already
+    filtered (see rag.generate_security_digest) — purely informational, for
+    the Security page's "Generate AI digest" button. Computed on-demand,
+    not automatically, so it costs a Gemini call only when a SuperAdmin
+    actually asks for one."""
+    digest = rag.generate_security_digest(req.log_lines)
+    if digest is None:
+        raise HTTPException(503, "AI digest unavailable (Gemini not configured, no log lines, or the request failed)")
+    logger.info("AI security digest generated: line_count=%d by=%s", len(req.log_lines), _user["username"])
+    return {"digest": digest}
 
 
 @app.get("/quarantine")
@@ -424,6 +548,27 @@ def quarantine_download(quarantine_id: str, _user: dict = SUPERADMIN_ONLY):
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
+
+
+@app.post("/quarantine/{quarantine_id}/explain")
+def quarantine_explain(quarantine_id: str, _user: dict = SUPERADMIN_ONLY):
+    """On-demand AI read on why this file was quarantined (see rag.explain_quarantine)
+    — purely informational, computed only when a SuperAdmin actually asks for it
+    rather than eagerly for every quarantined file. Never affects the file's
+    quarantine status; release/delete are separate, unrelated endpoints."""
+    result = quarantine.get_quarantined_file(quarantine_id)
+    if result is None:
+        raise HTTPException(404, "Quarantined file not found")
+    _, meta = result
+    explanation = rag.explain_quarantine(meta["original_filename"], meta["reason"])
+    if explanation is None:
+        raise HTTPException(503, "AI explanation unavailable (Gemini not configured or the request failed)")
+    confidence, text = explanation
+    logger.info(
+        "AI quarantine explanation generated: id=%s filename=%s confidence=%s by=%s",
+        quarantine_id, meta["original_filename"], confidence, _user["username"],
+    )
+    return {"confidence": confidence, "explanation": text}
 
 
 @app.post("/quarantine/{quarantine_id}/release")

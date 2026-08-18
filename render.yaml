@@ -68,7 +68,9 @@ services:
       - key: JWT_EXPIRY_MINUTES
         value: "60"
 
-      # ---- Built-in accounts (must match athena-frontend's APP_USERNAME/SUPERADMIN_USERNAME) ----
+      # ---- Built-in accounts (backend is the sole source of truth for auth —
+      # every login is validated against these; athena-frontend below has
+      # its own copy solely for the quick-sign-in buttons, keep in sync) ----
       - key: APP_USERNAME
         value: ADMIN
       - key: APP_PASSWORD
@@ -108,4 +110,18 @@ services:
         value: 3.12.6
       # Set to the athena-backend service's URL once it's been created.
       - key: BACKEND_URL
+        sync: false
+
+      # ---- Login page "quick sign-in" buttons ----
+      # Must match athena-backend's APP_USERNAME/APP_PASSWORD/
+      # SUPERADMIN_USERNAME/SUPERADMIN_PASSWORD exactly — the backend is
+      # still the sole authority that actually validates them, this is
+      # only what the button sends. Leave blank to hide the buttons.
+      - key: APP_USERNAME
+        value: ADMIN
+      - key: APP_PASSWORD
+        sync: false
+      - key: SUPERADMIN_USERNAME
+        value: SuperAdmin
+      - key: SUPERADMIN_PASSWORD
         sync: false

@@ -12,7 +12,7 @@ archive for accepted ones. Both:
 
 Quarantined bytes are kept for admin review, not auto-deleted — they're
 useful for investigating what someone tried to upload and why it was
-rejected. Nothing outside app/quarantine.py ever needs to read them back.
+rejected. Nothing outside this module ever needs to read them back.
 """
 
 import hashlib
@@ -25,7 +25,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from . import config
+from ..core import config
 
 logger = logging.getLogger(__name__)
 

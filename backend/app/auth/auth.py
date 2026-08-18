@@ -16,7 +16,8 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from . import config, users
+from . import users
+from ..core import config
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,15 @@ def authenticate_user(username: str, password: str) -> Optional[str]:
     else:
         logger.warning("Authentication failed: username=%s", username)
     return role
+
+
+def account_exists(username: str) -> bool:
+    """Whether username names a real account at all (built-in ADMIN/SuperAdmin
+    or one created via users.add_user()) — independent of whether the password
+    supplied alongside it was correct. Used to keep login-throttle lockout,
+    AI risk assessment, and admin alert emails scoped to real accounts instead
+    of triggering for made-up usernames that were never registered."""
+    return username in (config.SUPERADMIN_USERNAME, config.APP_USERNAME) or users.user_exists(username)
 
 
 def create_token(username: str, role: str) -> str:

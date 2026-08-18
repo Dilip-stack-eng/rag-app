@@ -7,11 +7,23 @@ from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
+from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
+
+load_dotenv()
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 MAX_LOGIN_ATTEMPTS = 3
 LOCKOUT_SECONDS = 60
+
+# Only used by the login page's "quick sign-in" buttons (see _quick_login) —
+# read server-side so the real password is sent straight to POST /auth/login
+# without ever being rendered into the page's HTML, unlike filling a
+# password input would. Leave unset to hide the buttons entirely.
+QUICK_LOGIN_ADMIN_USERNAME = os.getenv("APP_USERNAME", "ADMIN")
+QUICK_LOGIN_ADMIN_PASSWORD = os.getenv("APP_PASSWORD", "")
+QUICK_LOGIN_SUPERADMIN_USERNAME = os.getenv("SUPERADMIN_USERNAME", "SuperAdmin")
+QUICK_LOGIN_SUPERADMIN_PASSWORD = os.getenv("SUPERADMIN_PASSWORD", "")
 
 st.set_page_config(page_title="Athena", page_icon="✻", layout="wide")
 
@@ -81,6 +93,9 @@ CLAUDE_CSS = """
     --claude-text-soft: #6B6658;
     --claude-border: #E5E1D6;
     --claude-bubble: #F0EEE6;
+    --claude-danger: #A3432F;
+    --claude-success: #2E5339;
+    --claude-warning: #B45309;
 }
 
 html, body, [class*="css"] {
@@ -167,22 +182,34 @@ html, body, [class*="css"] {
 /* Destructive / clear-documents row */
 .clear-docs-marker + div .stButton > button {
     background-color: transparent;
-    color: #A3432F;
+    color: var(--claude-danger);
     border: 1px solid var(--claude-border);
     font-weight: 500;
 }
 .clear-docs-marker + div .stButton > button:hover {
     background-color: rgba(163, 67, 47, 0.08);
-    border-color: #A3432F;
+    border-color: var(--claude-danger);
 }
 
 /* ---------- Main column ---------- */
 .block-container {
     max-width: 820px;
-    padding-top: 2rem;
+    /* Streamlit's own fixed top header bar is taller than this used to
+       account for, so the first line of page content (e.g. the Query
+       Trace caption) was rendering partly underneath it — ascenders of
+       the very first line got visually clipped. */
+    padding-top: 3.5rem;
 }
 .block-container:has(.login-page-marker) {
     max-width: 1560px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* Hide Streamlit's own top toolbar on the login page only — reclaims
+   vertical space so the whole card fits one screen with no scrolling. */
+.stApp:has(.login-page-marker) [data-testid="stHeader"] {
+    display: none;
 }
 
 h1 {
@@ -274,8 +301,8 @@ h1 {
 }
 
 /* Alerts */
-[data-testid="stAlertContentSuccess"] { color: #2E5339; }
-[data-testid="stAlertContentError"] { color: #A3432F; }
+[data-testid="stAlertContentSuccess"] { color: var(--claude-success); }
+[data-testid="stAlertContentError"] { color: var(--claude-danger); }
 
 hr, [data-testid="stDivider"] {
     border-color: var(--claude-border) !important;
@@ -284,16 +311,21 @@ hr, [data-testid="stDivider"] {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background-color: var(--claude-border); border-radius: 8px; }
 
-/* ---------- Login page ---------- */
+/* ---------- Login page ----------
+   Split shell: rotating AI-scenario visual pane (left) + plain white
+   sign-in card (right) — the pane's own box (background, radius, shadow)
+   lives on the shell/column, so the card marker itself stays flat here
+   to avoid a double border/shadow. */
 .login-page-marker + div {
     display: flex;
     justify-content: center;
-    padding-top: 4vh;
+    align-items: center;
+    min-height: calc(100vh - 1rem);
+    padding-top: 0;
 }
 
-/* Split shell: rotating AI-visual pane (left) + form pane (right) */
 .login-split-marker + div[data-testid="stHorizontalBlock"] {
-    max-width: 1440px;
+    max-width: 1320px;
     width: 100%;
     margin: 0 auto;
     border-radius: 24px;
@@ -309,14 +341,17 @@ hr, [data-testid="stDivider"] {
         linear-gradient(160deg, #2A2620 0%, #3D3929 55%, #2A2620 100%);
     padding: 0 !important;
     position: relative;
-    min-height: 760px;
+    min-height: min(640px, calc(100vh - 2rem));
+    max-height: calc(100vh - 2rem);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 [data-testid="stColumn"]:has(.login-form-marker) {
     background-color: #FFFFFF;
-    padding: 3.6rem 4.4rem !important;
+    padding: 1.5rem 2.6rem !important;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -353,7 +388,7 @@ hr, [data-testid="stDivider"] {
     position: relative;
     width: 100%;
     height: 100%;
-    min-height: 760px;
+    min-height: min(640px, calc(100vh - 2rem));
 }
 .login-scene {
     position: absolute;
@@ -362,36 +397,37 @@ hr, [data-testid="stDivider"] {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2.5rem;
+    padding: 2rem;
     text-align: center;
     opacity: 0;
 }
 .login-scene svg {
-    width: 190px;
-    height: 190px;
-    margin-bottom: 2rem;
+    width: 140px;
+    height: 140px;
+    margin-bottom: 1.4rem;
 }
 .login-scene-title {
     font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: #FFFFFF;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.5rem;
 }
 .login-scene-subtitle {
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: rgba(255, 255, 255, 0.65);
     max-width: 320px;
     line-height: 1.6;
 }
-/* Each scene is visible for a 1/5 (5-minute) slice of a 25-minute loop —
-   pure CSS, so it keeps rotating even while the page sits idle with no
-   Streamlit rerun (a rerun can't drive a wall-clock timer on its own). */
-.login-scene[data-idx="0"] { animation: login-scene-0 1500s linear infinite; }
-.login-scene[data-idx="1"] { animation: login-scene-1 1500s linear infinite; }
-.login-scene[data-idx="2"] { animation: login-scene-2 1500s linear infinite; }
-.login-scene[data-idx="3"] { animation: login-scene-3 1500s linear infinite; }
-.login-scene[data-idx="4"] { animation: login-scene-4 1500s linear infinite; }
+/* Each scene is visible for a 1/5 slice of a 750s (12.5-minute) loop, i.e.
+   ~2.5 minutes each — pure CSS, so it keeps rotating even while the page
+   sits idle with no Streamlit rerun (a rerun can't drive a wall-clock
+   timer on its own). */
+.login-scene[data-idx="0"] { animation: login-scene-0 750s linear infinite; }
+.login-scene[data-idx="1"] { animation: login-scene-1 750s linear infinite; }
+.login-scene[data-idx="2"] { animation: login-scene-2 750s linear infinite; }
+.login-scene[data-idx="3"] { animation: login-scene-3 750s linear infinite; }
+.login-scene[data-idx="4"] { animation: login-scene-4 750s linear infinite; }
 @keyframes login-scene-0 {
     0%, 19.5% { opacity: 1; }
     20%, 100% { opacity: 0; }
@@ -416,6 +452,55 @@ hr, [data-testid="stDivider"] {
     80%, 99.5% { opacity: 1; }
     100% { opacity: 0; }
 }
+
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .login-card-marker) {
+    background-color: transparent;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0;
+    gap: 0.5rem !important;
+}
+.login-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+.login-logo-name {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--claude-text);
+}
+.login-logo-name-accent {
+    color: var(--claude-accent);
+}
+.login-eyebrow {
+    text-align: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--claude-accent);
+    margin-bottom: 0.3rem;
+}
+.login-title {
+    font-family: 'Source Serif 4', Georgia, serif !important;
+    font-size: 1.5rem !important;
+    font-weight: 600 !important;
+    color: var(--claude-text) !important;
+    text-align: center;
+    margin-bottom: 0.2rem !important;
+}
+.login-subtitle {
+    color: var(--claude-text-soft);
+    font-size: 0.85rem;
+    text-align: center;
+    margin-bottom: 0.4rem;
+}
+.login-subtitle b { color: var(--claude-text); }
+
 .lang-bar-marker + div {
     display: flex;
     justify-content: flex-end;
@@ -444,8 +529,8 @@ hr, [data-testid="stDivider"] {
     color: var(--claude-text-soft);
     border: 1px solid var(--claude-border);
     border-radius: 10px;
-    height: 2.9rem;
-    min-height: 2.9rem;
+    height: 2.2rem;
+    min-height: 2.2rem;
     font-size: 1.05rem;
     padding: 0;
 }
@@ -453,107 +538,19 @@ hr, [data-testid="stDivider"] {
     border-color: var(--claude-accent);
     color: var(--claude-accent);
 }
-[data-testid="stVerticalBlockBorderWrapper"]:has(.login-card-marker) {
-    background-color: transparent;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0;
-}
-.login-logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.65rem;
-    margin-bottom: 1.1rem;
-}
-.login-logo-name {
-    font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--claude-text);
-}
-.login-logo-name-accent {
-    color: var(--claude-accent);
-}
-.login-eyebrow {
-    text-align: center;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--claude-accent);
-    margin-bottom: 0.5rem;
-}
-.login-title {
-    font-family: 'Source Serif 4', Georgia, serif !important;
-    font-size: 2.3rem !important;
-    font-weight: 600 !important;
-    color: var(--claude-text) !important;
-    text-align: center;
-    margin-bottom: 0.4rem !important;
-}
-.login-subtitle {
-    color: var(--claude-text-soft);
-    font-size: 1.05rem;
-    text-align: center;
-    margin-bottom: 2.3rem;
-}
-.login-subtitle b { color: var(--claude-text); }
-
-.google-btn-marker + div .stButton > button {
-    background-color: #FFFFFF;
-    color: var(--claude-text);
-    border: 1px solid var(--claude-border);
-    border-radius: 10px;
-    font-weight: 500;
-    position: relative;
-}
-.google-btn-marker + div .stButton > button::before {
-    content: "G";
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
-    line-height: 18px;
-    text-align: center;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: #fff;
-    background: conic-gradient(#4285F4 0deg 90deg, #34A853 90deg 180deg, #FBBC05 180deg 270deg, #EA4335 270deg 360deg);
-    border-radius: 50%;
-}
-.google-btn-marker + div .stButton > button:hover {
-    background-color: var(--claude-bg);
-    border-color: var(--claude-text-soft);
-    color: var(--claude-text);
-}
-
-.login-divider {
-    display: flex;
-    align-items: center;
-    color: var(--claude-text-soft);
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    margin: 1.1rem 0;
-}
-.login-divider::before, .login-divider::after {
-    content: "";
-    flex: 1;
-    border-bottom: 1px solid var(--claude-border);
-}
-.login-divider span { padding: 0 0.75rem; }
 
 .login-card-marker ~ div [data-testid="stTextInput"] input {
     border-radius: 10px;
-    padding: 0.95rem 1.15rem;
-    font-size: 1rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.92rem;
+}
+.login-card-marker ~ div [data-testid="stWidgetLabel"] p {
+    font-size: 0.85rem;
 }
 .login-card-marker ~ div [data-baseweb="select"] > div {
     border-radius: 10px;
-    min-height: 3.4rem;
-    font-size: 1rem;
+    min-height: 2.4rem;
+    font-size: 0.92rem;
     box-shadow: none !important;
 }
 
@@ -562,39 +559,85 @@ hr, [data-testid="stDivider"] {
     color: #fff;
     border: none;
     border-radius: 10px;
-    padding: 0.9rem 1.1rem;
-    font-size: 1.02rem;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.95rem;
     font-weight: 600;
 }
 .email-continue-marker + div .stButton > button:hover {
     background-color: var(--claude-accent-hover);
 }
 
-.back-link-marker + div .stButton > button {
-    background-color: transparent;
-    color: var(--claude-text-soft);
-    border: none;
-    font-weight: 400;
-    font-size: 0.85rem;
-    padding: 0.3rem 0;
+.quick-login-marker + div {
+    margin-top: 0.1rem;
 }
-.back-link-marker + div .stButton > button:hover {
+.quick-login-marker + div [data-testid="stCaptionContainer"] {
+    text-align: center;
+    font-size: 0.78rem;
+}
+.quick-login-marker ~ div .stButton > button {
+    background-color: #FFFFFF;
+    color: var(--claude-text-soft);
+    border: 1px dashed var(--claude-border);
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.7rem;
+}
+.quick-login-marker ~ div .stButton > button:hover {
+    border-color: var(--claude-accent);
     color: var(--claude-accent);
-    background-color: transparent;
 }
 
 .login-footer {
     text-align: center;
     color: var(--claude-text-soft);
-    font-size: 0.74rem;
-    line-height: 1.45;
+    font-size: 0.68rem;
+    line-height: 1.35;
     max-width: 480px;
-    margin: 1.5rem auto 0;
+    margin: 0.4rem auto 0;
 }
 .login-footer a { color: var(--claude-text-soft); text-decoration: underline; }
 
+/* ---------- Responsive: login page ----------
+   Below 900px the two-column shell doesn't have room to breathe, so the
+   visual pane is dropped entirely and the form column becomes its own
+   plain centered card instead (rather than squeezing both side by side). */
+@media (max-width: 900px) {
+    .login-split-marker + div[data-testid="stHorizontalBlock"] {
+        box-shadow: none;
+        border-radius: 0;
+        max-width: 560px;
+    }
+    [data-testid="stColumn"]:has(.login-visual-marker) {
+        display: none;
+    }
+    [data-testid="stColumn"]:has(.login-form-marker) {
+        border: 1px solid var(--claude-border);
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(61, 57, 41, 0.14);
+        padding: 2.2rem 2.4rem !important;
+    }
+}
+@media (max-width: 480px) {
+    [data-testid="stColumn"]:has(.login-form-marker) {
+        padding: 1.2rem 1.1rem !important;
+    }
+    .login-logo-name { font-size: 1.3rem; }
+}
+
+/* ---------- Responsive: main app ---------- */
+@media (max-width: 640px) {
+    .claude-greeting { font-size: 1.65rem !important; }
+    .claude-subgreeting { font-size: 0.92rem; }
+    .landing-marker + div { min-height: 35vh; }
+    .kv-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+    .kv-grid { grid-template-columns: 1fr; }
+}
+
 /* ---------- Code (retrieved chunks) view ---------- */
-[data-testid="stVerticalBlockBorderWrapper"]:has(.chunk-marker) {
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .chunk-marker) {
     border-radius: 12px !important;
     border-color: var(--claude-border) !important;
     padding: 0 !important;
@@ -610,6 +653,15 @@ hr, [data-testid="stDivider"] {
     font-size: 0.8rem;
     color: var(--claude-text-soft);
     font-weight: 500;
+}
+/* The retrieved-chunk text itself: wrap long lines instead of relying on
+   horizontal scroll, which was getting clipped by the card's own
+   overflow:hidden (needed to keep header-bar corners rounded) — words were
+   being cut off mid-word at the card edge with no way to see the rest. */
+.chunk-marker ~ div [data-testid="stCodeBlock"] pre,
+.chunk-marker ~ div [data-testid="stCodeBlock"] code {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
 }
 .chunk-card-header b { color: var(--claude-text); }
 
@@ -652,8 +704,8 @@ hr, [data-testid="stDivider"] {
     word-break: break-word;
 }
 .log-line:last-child { border-bottom: none; }
-.log-line.level-WARNING { color: #A3432F; }
-.log-line.level-ERROR { color: #A3432F; font-weight: 600; }
+.log-line.level-WARNING { color: var(--claude-warning); }
+.log-line.level-ERROR { color: var(--claude-danger); font-weight: 600; }
 
 /* ---------- Key/value summary grid (Control panel / Security) ---------- */
 .kv-grid {
@@ -741,17 +793,17 @@ hr, [data-testid="stDivider"] {
     transition: width 0.3s ease;
 }
 .token-usage-card.over-limit .tuc-pct {
-    color: #A3432F;
+    color: var(--claude-danger);
 }
 .token-usage-card.over-limit .token-usage-fill {
-    background-color: #A3432F;
+    background-color: var(--claude-danger);
 }
 .token-usage-card.over-limit {
-    border-color: #A3432F;
+    border-color: var(--claude-danger);
 }
 
 /* ---------- World clock (sidebar, above the ATHENA brand) ---------- */
-[data-testid="stVerticalBlockBorderWrapper"]:has(.world-clock-marker) {
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .world-clock-marker) {
     background-color: #FFFFFF;
     border: 1px solid var(--claude-border) !important;
     border-radius: 14px !important;
@@ -810,6 +862,8 @@ if "login_locked" not in st.session_state:
     st.session_state.login_locked = False
 if "login_locked_at" not in st.session_state:
     st.session_state.login_locked_at = None
+if "login_lock_reason" not in st.session_state:
+    st.session_state.login_lock_reason = None
 if "last_chunks" not in st.session_state:
     st.session_state.last_chunks = []
 if "last_question" not in st.session_state:
@@ -857,56 +911,31 @@ TRANSLATIONS = {
         "ar": "سجّل الدخول إلى Athena للدردشة مع مستنداتك.",
     },
     "lockout_message": {
-        "en": "🔒 Locked after 3 failed attempts. Auto-releases in ~{secs}s, or SuperAdmin can release it now below.",
-        "es": "🔒 Bloqueado tras 3 intentos fallidos. Se desbloquea automáticamente en ~{secs}s, o un SuperAdmin puede desbloquearlo ahora abajo.",
-        "fr": "🔒 Verrouillé après 3 tentatives échouées. Déverrouillage automatique dans ~{secs}s, ou un SuperAdmin peut le déverrouiller ci-dessous.",
-        "de": "🔒 Gesperrt nach 3 fehlgeschlagenen Versuchen. Automatische Freigabe in ~{secs}s, oder ein SuperAdmin kann unten jetzt freigeben.",
-        "hi": "🔒 3 असफल प्रयासों के बाद लॉक। लगभग {secs} सेकंड में अपने आप अनलॉक होगा, या SuperAdmin नीचे अभी अनलॉक कर सकता है.",
-        "ta": "🔒 3 தோல்வியுற்ற முயற்சிகளுக்குப் பிறகு பூட்டப்பட்டது. சுமார் {secs} வினாடிகளில் தானாக திறக்கும், அல்லது SuperAdmin கீழே இப்போது திறக்கலாம்.",
-        "te": "🔒 3 విఫల ప్రయత్నాల తర్వాత లాక్ చేయబడింది. సుమారు {secs} సెకన్లలో స్వయంచాలకంగా అన్‌లాక్ అవుతుంది, లేదా SuperAdmin దిగువన ఇప్పుడే అన్‌లాక్ చేయవచ్చు.",
-        "kn": "🔒 3 ವಿಫಲ ಪ್ರಯತ್ನಗಳ ನಂತರ ಲಾಕ್ ಆಗಿದೆ. ಸುಮಾರು {secs} ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಿಡುಗಡೆಯಾಗುತ್ತದೆ, ಅಥವಾ SuperAdmin ಕೆಳಗೆ ಈಗ ಬಿಡುಗಡೆ ಮಾಡಬಹುದು.",
-        "ml": "🔒 3 പരാജയപ്പെട്ട ശ്രമങ്ങൾക്ക് ശേഷം ലോക്ക് ചെയ്തു. ഏകദേശം {secs} സെക്കൻഡിൽ സ്വയമേവ അൺലോക്ക് ആകും, അല്ലെങ്കിൽ SuperAdmin-ന് ഇപ്പോൾ താഴെ അൺലോക്ക് ചെയ്യാം.",
-        "zh": "🔒 已连续 3 次登录失败，账户已锁定。约 {secs} 秒后自动解锁，或由 SuperAdmin 在下方立即解锁。",
-        "ja": "🔒 3回のログイン失敗によりロックされました。約{secs}秒後に自動解除されるか、SuperAdmin が以下から今すぐ解除できます。",
-        "ar": "🔒 تم القفل بعد 3 محاولات فاشلة. سيُفتح تلقائيًا خلال ~{secs} ثانية، أو يمكن لـ SuperAdmin فتحه الآن أدناه.",
+        "en": "🔒 Locked after 3 failed attempts. Auto-releases in ~{secs}s.",
+        "es": "🔒 Bloqueado tras 3 intentos fallidos. Se desbloquea automáticamente en ~{secs}s.",
+        "fr": "🔒 Verrouillé après 3 tentatives échouées. Déverrouillage automatique dans ~{secs}s.",
+        "de": "🔒 Gesperrt nach 3 fehlgeschlagenen Versuchen. Automatische Freigabe in ~{secs}s.",
+        "hi": "🔒 3 असफल प्रयासों के बाद लॉक। लगभग {secs} सेकंड में अपने आप अनलॉक होगा.",
+        "ta": "🔒 3 தோல்வியுற்ற முயற்சிகளுக்குப் பிறகு பூட்டப்பட்டது. சுமார் {secs} வினாடிகளில் தானாக திறக்கும்.",
+        "te": "🔒 3 విఫల ప్రయత్నాల తర్వాత లాక్ చేయబడింది. సుమారు {secs} సెకన్లలో స్వయంచాలకంగా అన్‌లాక్ అవుతుంది.",
+        "kn": "🔒 3 ವಿಫಲ ಪ್ರಯತ್ನಗಳ ನಂತರ ಲಾಕ್ ಆಗಿದೆ. ಸುಮಾರು {secs} ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಿಡುಗಡೆಯಾಗುತ್ತದೆ.",
+        "ml": "🔒 3 പരാജയപ്പെട്ട ശ്രമങ്ങൾക്ക് ശേഷം ലോക്ക് ചെയ്തു. ഏകദേശം {secs} സെക്കൻഡിൽ സ്വയമേവ അൺലോക്ക് ആകും.",
+        "zh": "🔒 已连续 3 次登录失败，账户已锁定。约 {secs} 秒后自动解锁。",
+        "ja": "🔒 3回のログイン失敗によりロックされました。約{secs}秒後に自動解除されます。",
+        "ar": "🔒 تم القفل بعد 3 محاولات فاشلة. سيُفتح تلقائيًا خلال ~{secs} ثانية.",
+    },
+    "lockout_reason_fallback": {
+        "en": "3 failed sign-in attempts in a row.", "es": "3 intentos de inicio de sesión fallidos seguidos.",
+        "fr": "3 tentatives de connexion échouées d'affilée.", "de": "3 fehlgeschlagene Anmeldeversuche in Folge.",
+        "hi": "लगातार 3 असफल साइन-इन प्रयास.", "ta": "தொடர்ந்து 3 உள்நுழைவு முயற்சிகள் தோல்வி.",
+        "te": "వరుసగా 3 సైన్-ఇన్ ప్రయత్నాలు విఫలమయ్యాయి.", "kn": "ಸತತ 3 ಸೈನ್-ಇನ್ ಪ್ರಯತ್ನಗಳು ವಿಫಲವಾಗಿವೆ.",
+        "ml": "തുടർച്ചയായി 3 സൈൻ-ഇൻ ശ്രമങ്ങൾ പരാജയപ്പെട്ടു.", "zh": "连续 3 次登录尝试失败。",
+        "ja": "3回連続でサインインに失敗しました。", "ar": "3 محاولات تسجيل دخول فاشلة متتالية.",
     },
     "check_again": {
         "en": "Check again", "es": "Comprobar de nuevo", "fr": "Vérifier à nouveau", "de": "Erneut prüfen",
         "hi": "फिर से जाँचें", "ta": "மீண்டும் சரிபார்க்கவும்", "te": "మళ్లీ తనిఖీ చేయండి",
         "kn": "ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ", "ml": "വീണ്ടും പരിശോധിക്കുക", "zh": "重新检查", "ja": "再確認", "ar": "تحقق مرة أخرى",
-    },
-    "superadmin_release": {
-        "en": "SuperAdmin release", "es": "Desbloqueo por SuperAdmin", "fr": "Déverrouillage SuperAdmin",
-        "de": "SuperAdmin-Freigabe", "hi": "SuperAdmin अनलॉक", "ta": "SuperAdmin திறப்பு",
-        "te": "SuperAdmin అన్‌లాక్", "kn": "SuperAdmin ಬಿಡುಗಡೆ", "ml": "SuperAdmin അൺലോക്ക്",
-        "zh": "SuperAdmin 解锁", "ja": "SuperAdmin による解除", "ar": "فتح بواسطة SuperAdmin",
-    },
-    "superadmin_username": {
-        "en": "SuperAdmin username", "es": "Usuario de SuperAdmin", "fr": "Nom d'utilisateur SuperAdmin",
-        "de": "SuperAdmin-Benutzername", "hi": "SuperAdmin उपयोगकर्ता नाम", "ta": "SuperAdmin பயனர்பெயர்",
-        "te": "SuperAdmin వినియోగదారు పేరు", "kn": "SuperAdmin ಬಳಕೆದಾರಹೆಸರು", "ml": "SuperAdmin ഉപയോക്തൃനാമം",
-        "zh": "SuperAdmin 用户名", "ja": "SuperAdmin ユーザー名", "ar": "اسم مستخدم SuperAdmin",
-    },
-    "superadmin_password": {
-        "en": "SuperAdmin password", "es": "Contraseña de SuperAdmin", "fr": "Mot de passe SuperAdmin",
-        "de": "SuperAdmin-Passwort", "hi": "SuperAdmin पासवर्ड", "ta": "SuperAdmin கடவுச்சொல்",
-        "te": "SuperAdmin పాస్‌వర్డ్", "kn": "SuperAdmin ಪಾಸ್‌ವರ್ಡ್", "ml": "SuperAdmin പാസ്‌വേഡ്",
-        "zh": "SuperAdmin 密码", "ja": "SuperAdmin パスワード", "ar": "كلمة مرور SuperAdmin",
-    },
-    "release_lock_signin": {
-        "en": "Release lock & sign in", "es": "Desbloquear e iniciar sesión", "fr": "Déverrouiller et se connecter",
-        "de": "Entsperren & anmelden", "hi": "अनलॉक करें और साइन इन करें", "ta": "திறந்து உள்நுழையவும்",
-        "te": "అన్‌లాక్ చేసి సైన్ ఇన్ చేయండి", "kn": "ಅನ್‌ಲಾಕ್ ಮಾಡಿ ಮತ್ತು ಸೈನ್ ಇನ್ ಮಾಡಿ",
-        "ml": "അൺലോക്ക് ചെയ്ത് സൈൻ ഇൻ ചെയ്യുക", "zh": "解锁并登录", "ja": "ロック解除してサインイン",
-        "ar": "فتح القفل وتسجيل الدخول",
-    },
-    "invalid_superadmin": {
-        "en": "Invalid SuperAdmin credentials.", "es": "Credenciales de SuperAdmin no válidas.",
-        "fr": "Identifiants SuperAdmin invalides.", "de": "Ungültige SuperAdmin-Zugangsdaten.",
-        "hi": "अमान्य SuperAdmin क्रेडेंशियल्स.", "ta": "தவறான SuperAdmin சான்றுகள்.",
-        "te": "చెల్లని SuperAdmin ఆధారాలు.", "kn": "ಅಮಾನ್ಯ SuperAdmin ರುಜುವಾತುಗಳು.",
-        "ml": "അസാധുവായ SuperAdmin വിവരങ്ങൾ.", "zh": "SuperAdmin 凭据无效。",
-        "ja": "SuperAdmin の認証情報が無効です。", "ar": "بيانات اعتماد SuperAdmin غير صالحة.",
     },
     "username": {
         "en": "Username", "es": "Usuario", "fr": "Nom d'utilisateur", "de": "Benutzername",
@@ -1154,10 +1183,6 @@ TRANSLATIONS = {
         "zh": "验证码不匹配，请重试。", "ja": "コードが一致しませんでした。もう一度お試しください。",
         "ar": "الرمز غير مطابق. حاول مرة أخرى.",
     },
-    "captcha_refresh": {
-        "en": "🔄", "es": "🔄", "fr": "🔄", "de": "🔄", "hi": "🔄", "ta": "🔄",
-        "te": "🔄", "kn": "🔄", "ml": "🔄", "zh": "🔄", "ja": "🔄", "ar": "🔄",
-    },
 }
 
 
@@ -1241,10 +1266,10 @@ def _render_captcha_image(text: str) -> bytes:
 # Rotating AI-themed visuals for the login page's left panel — each tied to
 # something Athena actually does, not generic stock art. Rotation itself is
 # pure CSS (see .login-scene keyframes in CLAUDE_CSS), so it keeps cycling
-# every 5 minutes even while the page sits idle with no Streamlit rerun.
+# every ~2.5 minutes even while the page sits idle with no Streamlit rerun.
 _LOGIN_SCENES = [
     {
-        "title": "Powered by Gemini",
+        "title": "Powered by Athena",
         "subtitle": "Advanced language understanding behind every answer.",
         "svg": """<svg viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
             <line x1="110" y1="60" x2="60" y2="110" stroke="rgba(217,119,87,0.45)" stroke-width="1.5"/>
@@ -1327,7 +1352,7 @@ def _login_visual_html() -> str:
         '<span>ATHENA <span class="login-visual-brand-accent">AI</span></span></div>'
         f'<div class="login-scene-stack">{scenes}</div>'
         '<div class="login-visual-trust">🔒 YARA-scanned uploads'
-        '<span>&middot;</span>⚡ Powered by Gemini'
+        '<span>&middot;</span>⚡ Powered by Athena'
         '<span>&middot;</span>🔐 Role-based access</div>'
     )
 
@@ -1336,6 +1361,7 @@ def _reset_lockout():
     st.session_state.login_attempts = 0
     st.session_state.login_locked = False
     st.session_state.login_locked_at = None
+    st.session_state.login_lock_reason = None
 
 
 def _check_credentials(username, password):
@@ -1364,6 +1390,32 @@ def _check_credentials(username, password):
     return False, False, message
 
 
+def _quick_login(username: str, password: str) -> None:
+    """One-click sign-in for the login page's ADMIN/SuperAdmin quick-access
+    buttons. Goes through the same real /auth/login call as typing
+    credentials in by hand — this does not bypass the backend's lockout
+    throttling or audit logging, it only skips the manual typing step."""
+    if not password:
+        st.session_state.login_error = (
+            f"Quick sign-in for {username} isn't configured "
+            "(missing password env var on the frontend service)."
+        )
+        st.rerun()
+        return
+    ok, is_superadmin, message = _check_credentials(username, password)
+    if ok:
+        st.session_state.authenticated = True
+        st.session_state.login_username = username
+        st.session_state.is_superadmin = is_superadmin
+        st.session_state.login_error = ""
+        _reset_lockout()
+        st.session_state.pop("captcha_text", None)
+        st.rerun()
+    else:
+        st.session_state.login_error = message or f"Quick sign-in for {username} failed."
+        st.rerun()
+
+
 def _auth_headers():
     token = st.session_state.get("auth_token", "")
     return {"Authorization": f"Bearer {token}"} if token else {}
@@ -1383,11 +1435,10 @@ def render_login():
         st.markdown(_login_visual_html(), unsafe_allow_html=True)
     with mid:
         st.markdown('<div class="login-form-marker"></div>', unsafe_allow_html=True)
-        language_selector()
         with st.container(border=True):
             st.markdown('<div class="login-card-marker"></div>', unsafe_allow_html=True)
             st.markdown(
-                f'<div class="login-logo">{athena_logo(46)}'
+                f'<div class="login-logo">{athena_logo(32)}'
                 '<span class="login-logo-name">ATHENA <span class="login-logo-name-accent">AI</span></span>'
                 '</div>',
                 unsafe_allow_html=True,
@@ -1403,44 +1454,28 @@ def render_login():
                 elapsed = time.time() - st.session_state.login_locked_at
                 remaining_secs = max(0, int(LOCKOUT_SECONDS - elapsed))
                 st.error(t("lockout_message", secs=remaining_secs))
+                st.caption(f"Reason: {st.session_state.login_lock_reason or t('lockout_reason_fallback')}")
                 if st.button(t("check_again"), key="lockout_recheck"):
                     st.rerun()
-
-                with st.expander(t("superadmin_release")):
-                    with st.form("superadmin_release_form"):
-                        sa_username = st.text_input(t("superadmin_username"), key="sa_username_input")
-                        sa_password = st.text_input(
-                            t("superadmin_password"), type="password", key="sa_password_input"
-                        )
-                        sa_submitted = st.form_submit_button(t("release_lock_signin"), use_container_width=True)
-                    if sa_submitted:
-                        ok, is_superadmin, message = _check_credentials(sa_username, sa_password)
-                        if ok and is_superadmin:
-                            _reset_lockout()
-                            st.session_state.authenticated = True
-                            st.session_state.login_username = sa_username
-                            st.session_state.is_superadmin = True
-                            st.session_state.login_error = ""
-                            st.rerun()
-                        else:
-                            st.error(message or t("invalid_superadmin"))
             else:
                 if "captcha_text" not in st.session_state:
                     st.session_state.captcha_text = _random_captcha_text()
 
-                username_choice = st.selectbox(
-                    t("username"), ["ADMIN", "SuperAdmin", "Other…"], key="username_choice"
-                )
-                if username_choice == "Other…":
-                    username = st.text_input(
-                        t("username"), placeholder=t("username"),
-                        key="username_input", label_visibility="collapsed",
-                    )
-                else:
-                    username = username_choice
+                username = st.text_input(t("username"), placeholder=t("username"), key="username_input")
                 password = st.text_input(
                     t("password"), type="password", placeholder=t("password"), key="password_input"
                 )
+
+                if QUICK_LOGIN_ADMIN_PASSWORD or QUICK_LOGIN_SUPERADMIN_PASSWORD:
+                    st.markdown('<div class="quick-login-marker"></div>', unsafe_allow_html=True)
+                    st.caption("Quick sign-in")
+                    qa_col, qs_col = st.columns(2)
+                    with qa_col:
+                        if st.button("ADMIN", key="quick_login_admin", use_container_width=True):
+                            _quick_login(QUICK_LOGIN_ADMIN_USERNAME, QUICK_LOGIN_ADMIN_PASSWORD)
+                    with qs_col:
+                        if st.button("SuperAdmin", key="quick_login_superadmin", use_container_width=True):
+                            _quick_login(QUICK_LOGIN_SUPERADMIN_USERNAME, QUICK_LOGIN_SUPERADMIN_PASSWORD)
 
                 cap_col, refresh_col = st.columns([1, 1])
                 with cap_col:
@@ -1485,6 +1520,14 @@ def render_login():
                             if remaining <= 0 or backend_locked:
                                 st.session_state.login_locked = True
                                 st.session_state.login_locked_at = time.time()
+                                # Strip the trailing "Try again in Xs." clause — the countdown
+                                # above already shows a live, ticking remaining time, so keeping
+                                # a second, frozen-at-lock-time second count here would drift out
+                                # of sync with it and look like two different numbers/bugs.
+                                st.session_state.login_lock_reason = (
+                                    message.split(". Try again")[0].strip() + "."
+                                    if backend_locked and message else None
+                                )
                             else:
                                 st.session_state.login_error = message or t("invalid_login", remaining=remaining)
                             st.rerun()
@@ -1528,6 +1571,7 @@ with st.sidebar:
             ("quarantine", "Quarantine"),
             ("prompts", "Prompts"),
             ("security", "Security"),
+            ("alert_logs", "Alert logs"),
             ("users", "Users"),
             ("control_panel", "Control panel"),
         ]
@@ -1577,6 +1621,11 @@ _SECURITY_LOG_KEYWORDS = (
     "Session expired", "Request rejected", "Authorization denied",
     "Failed login recorded", "Scan INFECTED", "Scan error", "Sending lockout alert",
     "Quarantined upload", "Filename sanitized",
+)
+_ALERT_LOG_KEYWORDS = (
+    "Sending lockout alert", "Alert email sent", "SMTP not configured; skipping alert",
+    "Failed to send alert email", "ALERT_MOBILE_GATEWAY_DOMAIN not set",
+    "Account locked", "Lockout extended by AI risk assessment", "Lockout expired",
 )
 
 
@@ -1805,7 +1854,44 @@ if st.session_state.main_nav == "security":
     if log_error:
         st.error(log_error)
     else:
+        security_lines = [line for line in log_data.get("lines", []) if any(k in line for k in _SECURITY_LOG_KEYWORDS)]
+
+        if st.button("🤖 Generate AI security digest", key="security_digest_btn"):
+            if not security_lines:
+                st.session_state["security_digest"] = {"error": "No security log entries to summarize yet."}
+            else:
+                try:
+                    resp = requests.post(
+                        f"{BACKEND_URL}/security/digest",
+                        json={"log_lines": security_lines},
+                        headers=_auth_headers(),
+                        timeout=30,
+                    )
+                    if resp.ok:
+                        st.session_state["security_digest"] = {"text": resp.json()["digest"]}
+                    else:
+                        st.session_state["security_digest"] = {"error": _error_detail(resp)}
+                except requests.exceptions.RequestException:
+                    st.session_state["security_digest"] = {"error": t("backend_unreachable")}
+            st.rerun()
+
+        if "security_digest" in st.session_state:
+            result = st.session_state["security_digest"]
+            if "error" in result:
+                st.error(result["error"])
+            else:
+                st.info(f"🤖 **AI security digest**\n\n{result['text']}")
+
         _render_log_lines(log_data.get("lines", []), _SECURITY_LOG_KEYWORDS)
+
+# ---- Alert logs: tail of login-lockout alert lines (email/SMS delivery, AI-extended lockouts) ----
+if st.session_state.main_nav == "alert_logs":
+    st.caption("Recent account-lockout alerts, including admin email/SMS notifications and AI-extended lockout durations.")
+    log_data, log_error = _get_json("/logs/recent", params={"limit": 300})
+    if log_error:
+        st.error(log_error)
+    else:
+        _render_log_lines(log_data.get("lines", []), _ALERT_LOG_KEYWORDS)
 
 # ---- Quarantine: files YARA/validation flagged, pending manual review ----
 if st.session_state.main_nav == "quarantine":
@@ -1832,7 +1918,33 @@ if st.session_state.main_nav == "quarantine":
                 if is_av_hit:
                     st.warning("⚠️ YARA flagged this as malicious. Only accept if you've verified it yourself.")
 
-                dl_col, accept_col, delete_col = st.columns(3)
+                explain_key = f"qexplain_{qid}"
+                if explain_key in st.session_state:
+                    result = st.session_state[explain_key]
+                    if "error" in result:
+                        st.error(result["error"])
+                    else:
+                        icon = {"high": "🔴", "medium": "🟠", "low": "🟢"}.get(result["confidence"], "⚪")
+                        st.info(
+                            f"{icon} **AI confidence this is a genuine threat: {result['confidence'].upper()}** "
+                            f"— {result['explanation']}"
+                        )
+
+                explain_col, dl_col, accept_col, delete_col = st.columns(4)
+
+                with explain_col:
+                    if st.button("🤖 AI explain", key=f"qexplain_btn_{qid}", use_container_width=True):
+                        try:
+                            resp = requests.post(
+                                f"{BACKEND_URL}/quarantine/{qid}/explain", headers=_auth_headers(), timeout=30
+                            )
+                            if resp.ok:
+                                st.session_state[explain_key] = resp.json()
+                            else:
+                                st.session_state[explain_key] = {"error": _error_detail(resp)}
+                        except requests.exceptions.RequestException:
+                            st.session_state[explain_key] = {"error": t("backend_unreachable")}
+                        st.rerun()
 
                 with dl_col:
                     dl_key = f"qdl_data_{qid}"
@@ -1867,6 +1979,7 @@ if st.session_state.main_nav == "quarantine":
                                 data = resp.json()
                                 st.success(t("added_chunks", n=data["chunks_added"], filename=data["filename"]))
                                 st.session_state.pop(dl_key, None)
+                                st.session_state.pop(explain_key, None)
                                 st.rerun()
                             else:
                                 st.error(_error_detail(resp))
@@ -1882,6 +1995,7 @@ if st.session_state.main_nav == "quarantine":
                             if resp.ok:
                                 st.success(f"Deleted {qf['original_filename']}.")
                                 st.session_state.pop(dl_key, None)
+                                st.session_state.pop(explain_key, None)
                                 st.rerun()
                             else:
                                 st.error(_error_detail(resp))
@@ -1945,26 +2059,86 @@ if st.session_state.main_nav == "control_panel":
             ("Documents ingested", info["document_count"]),
         ])
 
+        st.markdown('<div class="sidebar-section-label">Built-in accounts &amp; access</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(f"👤 **{QUICK_LOGIN_ADMIN_USERNAME}** — role: ADMIN")
+            st.caption(
+                "Read access — ask questions, view ingested documents and prompt versions, "
+                "see own daily token usage. Cannot upload/delete documents, manage users, "
+                "or view security/quarantine/logs/settings."
+            )
+        with st.container(border=True):
+            st.markdown(f"👑 **{QUICK_LOGIN_SUPERADMIN_USERNAME}** — role: SuperAdmin")
+            st.caption(
+                "Full access — everything ADMIN has, plus upload/delete documents, manage "
+                "users, security & quarantine review, activity logs, and system settings."
+            )
+
         st.markdown('<div class="sidebar-section-label">Login attempts</div>', unsafe_allow_html=True)
         st.caption(
             f"Accounts with recent failed logins. After {info['login_max_attempts']} failed "
             f"attempts an account locks for {info['login_lockout_seconds']}s — resets automatically "
-            "when it expires, or on the account's next successful login."
+            "when it expires, or on the account's next successful login. A SuperAdmin can also "
+            "block or unblock any account's access directly below, independent of failed attempts."
         )
+
+        with st.form("block_user_form", clear_on_submit=True):
+            block_col, block_btn_col = st.columns([3, 1])
+            with block_col:
+                block_username = st.text_input(
+                    "Username to block", placeholder="Username to block", label_visibility="collapsed",
+                )
+            with block_btn_col:
+                block_submitted = st.form_submit_button("Block", use_container_width=True)
+        if block_submitted:
+            if not block_username.strip():
+                st.error("Enter a username to block.")
+            else:
+                try:
+                    resp = requests.post(
+                        f"{BACKEND_URL}/login-attempts/{block_username.strip()}/block",
+                        headers=_auth_headers(),
+                        timeout=5,
+                    )
+                    if resp.ok:
+                        st.success(f"'{block_username.strip()}' is now blocked from logging in.")
+                    else:
+                        st.error(_error_detail(resp))
+                except requests.exceptions.RequestException:
+                    st.error(t("backend_unreachable"))
+                st.rerun()
+
         la_data, la_error = _get_json("/login-attempts")
         if la_error:
             st.error(la_error)
         elif not la_data.get("attempts"):
-            st.caption("No failed login attempts on record.")
+            st.caption("No failed login attempts or blocked accounts on record.")
         else:
             for a in la_data["attempts"]:
-                if a["locked"]:
-                    st.warning(
-                        f"🔒 **{a['username']}** — locked after {a['failures']} failed attempts. "
-                        f"Unlocks in {a['remaining_seconds']}s."
-                    )
-                else:
-                    st.caption(f"{a['username']} — {a['failures']} failed attempt(s), not locked.")
+                row_col, action_col = st.columns([4, 1])
+                with row_col:
+                    if a["blocked"]:
+                        st.error(f"🚫 **{a['username']}** — blocked by a SuperAdmin. No auto-expiry.")
+                    elif a["locked"]:
+                        st.warning(
+                            f"🔒 **{a['username']}** — locked after {a['failures']} failed attempts. "
+                            f"Unlocks in {a['remaining_seconds']}s."
+                        )
+                    else:
+                        st.caption(f"{a['username']} — {a['failures']} failed attempt(s), not locked.")
+                with action_col:
+                    if a["locked"] and st.button("Unblock", key=f"unblock_{a['username']}", use_container_width=True):
+                        try:
+                            resp = requests.post(
+                                f"{BACKEND_URL}/login-attempts/{a['username']}/unblock",
+                                headers=_auth_headers(),
+                                timeout=5,
+                            )
+                            if not resp.ok:
+                                st.error(_error_detail(resp))
+                        except requests.exceptions.RequestException:
+                            st.error(t("backend_unreachable"))
+                        st.rerun()
 
         st.markdown('<div class="sidebar-section-label">Daily token limit</div>', unsafe_allow_html=True)
         st.caption(

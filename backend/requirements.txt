@@ -10,3 +10,4 @@ PyJWT
 bcrypt
 python-docx
 yara-python
+Pillow

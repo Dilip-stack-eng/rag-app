@@ -20,6 +20,7 @@ frontend/.streamlit/secrets.toml
 
 # Tooling caches
 .ruff_cache/
+.pytest_cache/
 
 # OS/editor
 .DS_Store

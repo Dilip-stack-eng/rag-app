@@ -4,7 +4,7 @@ import ssl
 from email.mime.text import MIMEText
 from typing import Optional
 
-from . import config
+from .core import config
 
 logger = logging.getLogger(__name__)
 

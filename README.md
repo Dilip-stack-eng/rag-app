@@ -1,7 +1,22 @@
-# Simple RAG (Gemini + Chroma + Streamlit + FastAPI)
+
+
+
+# Athena — Secure RAG Chat (Gemini + Chroma + Streamlit + FastAPI)
 
 Upload documents, embed and store them in ChromaDB, and ask questions
-answered by Google's Gemini API using retrieved context.
+answered by Google's Gemini API using retrieved context — with a full
+upload-security pipeline and AI-assisted security decisions layered on
+top of it.
+
+## Highlights
+
+- **RAG chat** — upload `.txt` / `.pdf` / `.docx`, ask questions, get answers grounded in your documents with cited sources.
+- **Upload security pipeline** — every file passes filename sanitization, an extension whitelist, executable-signature detection, magic-byte type verification, YARA malware scanning, and a zip-bomb guard before it's ever ingested. Anything that fails is quarantined (bytes kept for manual review), never silently dropped.
+- **Role-based access** — ADMIN / SuperAdmin roles, JWT auth, server-side login lockout (enforced by the backend, not just the UI) with CAPTCHA.
+- **PII protection** — a versioned prompt system deterministically masks or refuses restricted fields (salary, SSN, etc.) instead of trusting the LLM to redact correctly.
+- **AI-assisted security** — Gemini judges risk and writes plain-English explanations for login lockouts, quarantined files, and recent security activity. In every case the AI only advises; the actual security decision stays deterministic and keeps working even if the AI call fails. See [Checking the AI features by hand](#checking-the-ai-features-by-hand).
+- **Admin surface** — Knowledge base management, training/security logs, quarantine review, prompt version control, user management, daily token-quota limits, live login-attempt status.
+- **Deploy anywhere** — `uv`-managed local dev, a single Docker container, or Render (free-tier Blueprint included).
 
 ## Architecture
 
@@ -40,6 +55,47 @@ uv run --directory frontend streamlit run app.py
 ```
 
 Then open the Streamlit URL, upload a `.txt` or `.pdf` file in the sidebar, and ask questions in the chat box.
+
+## Testing
+
+`test_data/` has fixture files (clean docs, an EICAR test file, a
+type-mismatch file, a fake executable) and an end-to-end pytest suite
+covering the API directly, including the AI features. See
+`test_data/README.md`. Quick start (backend must already be running):
+
+```
+uv run pytest test_data/test_api.py -v
+```
+
+### Checking the AI features by hand
+
+Three places in the app use Gemini for judgment calls — always as an
+advisor layered on top of logic that keeps working even if the AI call
+fails. All three silently skip/no-op instead of erroring if
+`GEMINI_API_KEY` isn't configured, and the underlying security control
+(the lockout itself, the quarantine decision) is unaffected either way.
+
+1. **Lockout risk extension** — on the login page, fail ADMIN's password
+   **3 times quickly** (within a couple of seconds). The account locks for
+   the usual 60s baseline — but if Gemini judges the burst as
+   automated-looking, it silently extends the lockout further. Log in as
+   SuperAdmin → **Control panel** → "Login attempts" to see the real
+   remaining time, or check `backend/data/logs/app.log` for a
+   `Lockout extended by AI risk assessment` line.
+
+2. **Quarantine AI triage** — upload a file that gets rejected (e.g.
+   `test_data/fixtures/eicar_test.txt`, or anything else that trips the
+   upload validation checks). As SuperAdmin → **Quarantine** → find the
+   entry → click **🤖 AI explain**. You should see a confidence rating
+   (🔴 high / 🟠 medium / 🟢 low) and a plain-English explanation of why
+   it was flagged.
+
+3. **AI security digest** — as SuperAdmin → **Security** → click
+   **🤖 Generate AI security digest**. It summarizes the recent
+   authentication/authorization/scan-rejection log lines into a short
+   analyst-style readout: what happened, what's anomalous, what to do
+   next. Try steps 1–2 above first so there's actually something to
+   summarize.
 
 ## API
 
